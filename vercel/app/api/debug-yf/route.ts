@@ -62,9 +62,29 @@ export async function GET() {
     results.fundamentals_parsed = { error: String(e?.message || e) };
   }
 
+  // Directly replicate fetchFundamentals logic with full error exposure
   try {
-    const f = await fetchFundamentals("NVDA");
-    results.fundamentals = { ok: f.market_cap != null, market_cap: f.market_cap, pe_ttm: f.pe_ttm, pe_fwd: f.pe_fwd, ws_rating: f.ws_rating };
+    const UA2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    const cookieRes3 = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA2 }, redirect: "follow" });
+    const cookie3 = (cookieRes3.headers.get("set-cookie") ?? "").split(";")[0];
+    const crumbRes3 = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": UA2, Cookie: cookie3 }
+    });
+    const crumb3 = (await crumbRes3.text()).trim();
+    const url3 = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=NVDA&fields=marketCap,trailingPE,forwardPE&crumb=${encodeURIComponent(crumb3)}`;
+    const res3 = await fetch(url3, { headers: { "User-Agent": UA2, Cookie: cookie3 } });
+    const body3 = await res3.text();
+    let q3: any = {};
+    try { q3 = JSON.parse(body3)?.quoteResponse?.result?.[0] ?? {}; } catch {}
+    results.fundamentals = {
+      ok: q3.marketCap != null,
+      http_status: res3.status,
+      cookie_len: cookie3.length,
+      crumb_len: crumb3.length,
+      market_cap: q3.marketCap,
+      pe_fwd: q3.forwardPE,
+      raw_snippet: body3.slice(0, 200),
+    };
   } catch (e: any) {
     results.fundamentals = { ok: false, error: String(e?.message || e) };
   }
