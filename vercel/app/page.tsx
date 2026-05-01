@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CategoryPanel from "@/components/CategoryPanel";
 import { jget, jpost, jpatch, jdel } from "@/lib/api";
 import type { Quote } from "@/lib/quote";
@@ -65,10 +65,30 @@ export default function Page() {
   const [selected, setSelected] = useState<Ticker | null>(null);
   const [activeSector, setActiveSector] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const isInputFocused = useRef(false);
 
-  const fetchSnapshot = async () => {
+  // Track whether user is typing — skip state updates while focused to avoid losing input
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+        isInputFocused.current = true;
+      }
+    };
+    const onFocusOut = () => { isInputFocused.current = false; };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
+  }, []);
+
+  const fetchSnapshot = async (force = false) => {
     try {
       const data = await jget<Snapshot>("/api/snapshot");
+      // Don't disrupt the user while they're typing — defer until they stop
+      if (!force && isInputFocused.current) return;
       setSectors(data.sectors);
       setCategories(data.categories);
       setTickers(data.tickers);
@@ -81,8 +101,8 @@ export default function Page() {
   };
 
   useEffect(() => {
-    fetchSnapshot();
-    const id = setInterval(fetchSnapshot, POLL_MS);
+    fetchSnapshot(true);
+    const id = setInterval(() => fetchSnapshot(), POLL_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line
   }, []);
