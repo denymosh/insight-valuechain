@@ -1,96 +1,75 @@
-// Oracle HCM Recruiting Cloud — public REST API
-// Used by Nokia, Cisco, Intel (some), and other large companies.
-// No auth required, accessible from cloud IPs.
+// Oracle HCM Recruiting Cloud — facets-only summary fetch.
+// One request returns all aggregated counts (deps / countries / titles / posting-date buckets).
+// No need to paginate through individual job postings.
 
-export type JobPosting = {
+export type JobSummary = {
   symbol: string;
-  req_id: string;
-  title: string;
-  location: string | null;
-  country: string | null;
-  dept: string | null;
-  posted_date: string;     // YYYY-MM-DD
-  url: string;
+  total: number;
+  posted_7d: number;
+  posted_30d: number;
+  by_dept: Record<string, number>;
+  by_country: Record<string, number>;
+  by_title: Record<string, number>;
 };
 
 export type OracleHcmConfig = {
-  /** API host, e.g. "fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com" */
   host: string;
-  /** Site number, typically "CX_1" */
   siteNumber: string;
-  /** Public-facing careers domain for building job URLs, e.g. "jobs.nokia.com" */
   publicDomain: string;
-  /** Optional language path, defaults to "en" */
   langPath?: string;
 };
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-/**
- * Fetch all open job requisitions for a given Oracle HCM site.
- * Iterates through pages of 200 until done.
- */
-export async function fetchOracleHcmJobs(
+export async function fetchOracleHcmSummary(
   symbol: string,
   cfg: OracleHcmConfig
-): Promise<JobPosting[]> {
-  const out: JobPosting[] = [];
-  const lang = cfg.langPath ?? "en";
-  // Oracle HCM 通常忽略 limit 参数，每页固定返回 25 条
-  let offset = 0;
-  let total = Number.POSITIVE_INFINITY;
-  const MAX_ITERATIONS = 100; // 安全上限：100 * 25 = 2500 条
+): Promise<JobSummary | null> {
+  const url =
+    `https://${cfg.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
+    `?onlyData=true` +
+    `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)}` +
+    `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES`;
 
-  for (let iter = 0; iter < MAX_ITERATIONS && offset < total; iter++) {
-    const url =
-      `https://${cfg.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
-      `?onlyData=true&expand=requisitionList.secondaryLocations` +
-      `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)}` +
-      `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES` +
-      `&offset=${offset}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const meta = json?.items?.[0];
+  if (!meta) return null;
 
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-    });
-    if (!res.ok) break;
-    const json = await res.json();
+  const total = Number(meta.TotalJobsCount ?? 0);
+  if (!total) return null;
 
-    const items: any[] = json?.items?.[0]?.requisitionList ?? [];
-    if (offset === 0) {
-      total = Number(json?.items?.[0]?.TotalJobsCount ?? items.length);
-    }
-    if (items.length === 0) break;
-
-    for (const it of items) {
-      const reqId = String(it.Id ?? it.RequisitionId ?? "");
-      if (!reqId) continue;
-      const title: string = it.Title ?? "";
-      const primary: string | null = it.PrimaryLocation ?? null;
-      const country: string | null = it.PrimaryLocationCountry ?? null;
-      // Nokia 逐条 job 不带 Department；尝试 Department → Organization → JobFamily → JobFunction
-      const dept: string | null =
-        it.Department ?? it.Organization ?? it.JobFamily ?? it.JobFunction ?? null;
-      const posted: string | null = it.PostedDate ?? it.ExternalPostedStartDate ?? null;
-      if (!title || !posted) continue;
-
-      const jobUrl = `https://${cfg.publicDomain}/${lang}/sites/${cfg.siteNumber}/job/${reqId}`;
-      out.push({
-        symbol,
-        req_id: reqId,
-        title,
-        location: primary,
-        country,
-        dept,
-        posted_date: String(posted).slice(0, 10),
-        url: jobUrl,
-      });
-    }
-
-    offset += items.length;
-    // 早停优化：30 天内的 job 已足够，向用户展示后无意义继续翻页
-    // （但 cron 全量需要更彻底，所以 cron 里靠 total 判断）
+  // postingDatesFacet: 7-day / 30-day / >30 buckets
+  const postingDates: any[] = meta.postingDatesFacet ?? [];
+  let posted7 = 0, posted30 = 0;
+  for (const b of postingDates) {
+    const id = Number(b.Id);
+    const cnt = Number(b.TotalCount ?? 0);
+    if (id === 7) posted7 = cnt;
+    else if (id === 30) posted30 = cnt;
   }
 
-  return out;
+  const facetToMap = (arr: any[] | undefined): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const b of arr ?? []) {
+      const name = String(b.Name ?? "");
+      const cnt = Number(b.TotalCount ?? 0);
+      if (name && cnt) out[name] = cnt;
+    }
+    return out;
+  };
+
+  return {
+    symbol,
+    total,
+    posted_7d: posted7,
+    posted_30d: posted30,
+    by_dept: facetToMap(meta.categoriesFacet),
+    by_country: facetToMap(meta.locationsFacet),
+    by_title: facetToMap(meta.titlesFacet),
+  };
 }

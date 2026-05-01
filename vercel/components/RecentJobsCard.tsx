@@ -1,223 +1,198 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-type Job = {
+type JobSummary = {
   symbol: string;
-  req_id: string;
-  title: string;
-  location: string | null;
-  country: string | null;
-  dept: string | null;
-  posted_date: string;  // YYYY-MM-DD
-  url: string;
+  total: number;
+  posted_7d: number;
+  posted_30d: number;
+  by_dept: Record<string, number>;
+  by_country: Record<string, number>;
+  by_title: Record<string, number>;
+  fetched_at: string;
 };
 
-const PAGE_SIZE = 50;
+// 低成本研发地区（用于"注意"信号）
+const LOW_COST_COUNTRIES = ["India", "Poland", "Portugal", "Romania", "Hungary", "Mexico", "Vietnam", "Philippines"];
 
-function daysAgo(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00Z").getTime();
-  const today = Date.now();
-  const diff = Math.max(0, Math.floor((today - d) / 86400000));
-  if (diff === 0) return "今天";
-  if (diff === 1) return "昨天";
-  if (diff < 7) return `${diff}天前`;
-  if (diff < 14) return "1周前";
-  if (diff < 30) return `${Math.floor(diff / 7)}周前`;
-  return `${diff}天前`;
+function topN(map: Record<string, number>, n = 5): [string, number][] {
+  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n);
 }
 
-function deptColor(dept: string | null): { fg: string; bg: string } {
-  if (!dept) return { fg: "#94a3b8", bg: "rgba(148,163,184,0.10)" };
-  const d = dept.toLowerCase();
-  if (d.includes("r&d") || d.includes("research") || d.includes("engineering"))
-    return { fg: "#86efac", bg: "rgba(34,197,94,0.12)" };
-  if (d.includes("sales") || d.includes("marketing"))
-    return { fg: "#fdba74", bg: "rgba(251,146,60,0.12)" };
-  if (d.includes("finance") || d.includes("hr") || d.includes("corporate"))
-    return { fg: "#93c5fd", bg: "rgba(96,165,250,0.12)" };
-  if (d.includes("customer") || d.includes("support") || d.includes("services"))
-    return { fg: "#c4b5fd", bg: "rgba(167,139,250,0.12)" };
-  return { fg: "#cbd5e1", bg: "rgba(148,163,184,0.10)" };
+function pct(part: number, whole: number): number {
+  return whole > 0 ? Math.round((part / whole) * 100) : 0;
+}
+
+function timeAgo(iso: string): string {
+  const t = new Date(iso).getTime();
+  const diff = Date.now() - t;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "刚刚";
+  if (m < 60) return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} 小时前`;
+  const d = Math.floor(h / 24);
+  return `${d} 天前`;
+}
+
+/** Generates positive signals + cautions based on hiring data. */
+function analyze(s: JobSummary): { positive: string[]; caution: string[] } {
+  const positive: string[] = [];
+  const caution: string[] = [];
+
+  const rdCount  = s.by_dept["Applied R&D"] ?? s.by_dept["R&D"] ?? 0;
+  const rdPct    = pct(rdCount, s.total);
+  const swCount  = s.by_title["Software"] ?? 0;
+  const hwCount  = s.by_title["Digital Hardware"] ?? s.by_title["Hardware"] ?? 0;
+  const techCount = swCount + hwCount;
+  const traineeCount = s.by_title["Trainee"] ?? 0;
+  const traineePct = pct(traineeCount, s.total);
+
+  // Low-cost region concentration
+  let lowCostCount = 0;
+  for (const c of LOW_COST_COUNTRIES) lowCostCount += s.by_country[c] ?? 0;
+  const lowCostPct = pct(lowCostCount, s.total);
+  const lowCostNames = LOW_COST_COUNTRIES
+    .filter((c) => (s.by_country[c] ?? 0) > 0)
+    .slice(0, 3);
+
+  const post7Pct = pct(s.posted_7d, s.total);
+  const post30Pct = pct(s.posted_30d, s.total);
+
+  // ── Positive signals ─────
+  if (rdPct >= 30) {
+    positive.push(`R&D 投入大 (${rdCount} 个 / ${rdPct}%)`);
+  }
+  if (techCount >= 100) {
+    positive.push(`技术核心岗 ${techCount} 个 (软件 ${swCount} + 硬件 ${hwCount})`);
+  }
+  if (post7Pct >= 15) {
+    positive.push(`7 天新增 ${s.posted_7d} 个 (${post7Pct}% — 招聘加速)`);
+  }
+  if (post30Pct >= 40) {
+    positive.push(`30 天新增 ${s.posted_30d} 个 (${post30Pct}% — 持续扩张)`);
+  }
+
+  // ── Caution signals ──────
+  if (traineePct >= 15) {
+    caution.push(`Trainee ${traineeCount} 个 (${traineePct}% — 大量低薪新人)`);
+  }
+  if (lowCostPct >= 35) {
+    const places = lowCostNames.length ? `${lowCostNames.join(" + ")}` : "低成本地区";
+    caution.push(`${places} ${lowCostCount} 个 (${lowCostPct}% — 成本优化导向)`);
+  }
+  if (post7Pct < 5 && s.total > 100) {
+    caution.push(`7 天仅新增 ${s.posted_7d} 个 (${post7Pct}% — 招聘放缓)`);
+  }
+
+  return { positive, caution };
+}
+
+function SummaryCard({ s }: { s: JobSummary }) {
+  const { positive, caution } = analyze(s);
+  const topDepts = topN(s.by_dept, 3);
+  const topCountries = topN(s.by_country, 3);
+  const topTitles = topN(s.by_title, 3);
+  const rdCount  = s.by_dept["Applied R&D"] ?? s.by_dept["R&D"] ?? 0;
+  const rdPct    = pct(rdCount, s.total);
+
+  const overviewLines = [
+    `${s.total} 个开放职位`,
+    `7 天新增 ${s.posted_7d} (${pct(s.posted_7d, s.total)}%) · 30 天新增 ${s.posted_30d} (${pct(s.posted_30d, s.total)}%)`,
+    `R&D ${rdCount} (${rdPct}%) · 部门: ${topDepts.map(([n, c]) => `${n} ${c}`).join(" · ")}`,
+    `地点: ${topCountries.map(([n, c]) => `${n} ${c}`).join(" · ")}`,
+    `职位类型: ${topTitles.map(([n, c]) => `${n} ${c}`).join(" · ")}`,
+  ];
+
+  return (
+    <div style={{
+      background: "rgba(15,23,42,0.5)",
+      border: "1px solid rgba(51,65,85,0.5)",
+      borderRadius: 8,
+      padding: "14px 18px",
+      marginBottom: 14,
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{
+            fontWeight: 700, fontSize: 13, color: "#93c5fd",
+            background: "rgba(96,165,250,0.16)",
+            padding: "3px 10px", borderRadius: 5,
+          }}>{s.symbol}</span>
+          <span style={{ fontSize: 13, color: "#cbd5e1", fontWeight: 600 }}>
+            {s.total} jobs · 7d +{s.posted_7d} · 30d +{s.posted_30d}
+          </span>
+        </div>
+        <span style={{ fontSize: 10, color: "#64748b" }}>
+          更新于 {timeAgo(s.fetched_at)}
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+        <Section title="📊 总体概况" color="#cbd5e1" lines={overviewLines} />
+        <Section title="✅ 正面信号" color="#86efac"
+                 lines={positive.length ? positive : ["—"]} />
+        <Section title="⚠️ 需要注意" color="#fdba74"
+                 lines={caution.length ? caution : ["—"]} />
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, color, lines }: { title: string; color: string; lines: string[] }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, color, marginBottom: 6 }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: 14, color: "#cbd5e1", fontSize: 11.5, lineHeight: 1.65 }}>
+        {lines.map((line, i) => <li key={i}>{line}</li>)}
+      </ul>
+    </div>
+  );
 }
 
 export default function RecentJobsCard() {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [summaries, setSummaries] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [shown, setShown] = useState(PAGE_SIZE);
-  const [filterSym, setFilterSym] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/jobs?days=30&limit=500")
+    fetch("/api/jobs")
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
-        setJobs(d.jobs ?? []);
+        setSummaries(d.summaries ?? []);
         setLoading(false);
       })
       .catch(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, []);
 
-  const symbols = useMemo(() => {
-    const s = new Set(jobs.map((j) => j.symbol));
-    return Array.from(s).sort();
-  }, [jobs]);
-
-  const filtered = useMemo(
-    () => (filterSym ? jobs.filter((j) => j.symbol === filterSym) : jobs),
-    [jobs, filterSym]
-  );
-
-  const visible = filtered.slice(0, shown);
-
   return (
     <div style={{
       marginTop: 24, marginBottom: 32,
-      background: "rgba(15,23,42,0.4)",
-      border: "1px solid rgba(51,65,85,0.5)",
-      borderRadius: 10,
       padding: "16px 20px",
+      background: "rgba(15,23,42,0.3)",
+      border: "1px solid rgba(51,65,85,0.4)",
+      borderRadius: 10,
     }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>
-            📋 最近招聘动态
-          </h3>
-          <span style={{ fontSize: 11, color: "#64748b" }}>
-            近 30 天 · 按发布日期排序
-          </span>
-        </div>
-        {symbols.length > 1 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button
-              onClick={() => { setFilterSym(null); setShown(PAGE_SIZE); }}
-              style={chipStyle(filterSym === null)}
-            >全部</button>
-            {symbols.map((s) => (
-              <button
-                key={s}
-                onClick={() => { setFilterSym(s); setShown(PAGE_SIZE); }}
-                style={chipStyle(filterSym === s)}
-              >{s}</button>
-            ))}
-          </div>
-        )}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>
+          📋 招聘动态分析
+        </h3>
+        <span style={{ fontSize: 11, color: "#64748b" }}>
+          基于公开招聘数据，每日刷新
+        </span>
       </div>
 
       {loading ? (
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>加载中…</div>
-      ) : filtered.length === 0 ? (
+      ) : summaries.length === 0 ? (
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>
-          暂无数据。请确认 cron 已运行（/api/cron/refresh-jobs）。
+          暂无数据，请运行 /api/cron/refresh-jobs 触发首次抓取。
         </div>
       ) : (
-        <>
-          <div style={{ overflow: "hidden" }}>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "60px 70px 1fr 180px 120px 24px",
-              gap: 10,
-              padding: "6px 0",
-              fontSize: 10, color: "#64748b",
-              borderBottom: "1px solid rgba(51,65,85,0.4)",
-              textTransform: "uppercase", letterSpacing: "0.05em",
-            }}>
-              <div>标的</div>
-              <div>发布</div>
-              <div>职位</div>
-              <div>地点</div>
-              <div>部门</div>
-              <div></div>
-            </div>
-            {visible.map((j) => {
-              const dc = deptColor(j.dept);
-              return (
-                <a
-                  key={`${j.symbol}-${j.req_id}`}
-                  href={j.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "60px 70px 1fr 180px 120px 24px",
-                    gap: 10, alignItems: "center",
-                    padding: "8px 0",
-                    fontSize: 12,
-                    color: "#cbd5e1",
-                    textDecoration: "none",
-                    borderBottom: "1px solid rgba(51,65,85,0.2)",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(51,65,85,0.20)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <span style={{
-                    fontWeight: 700, fontSize: 11,
-                    color: "#93c5fd",
-                    background: "rgba(96,165,250,0.14)",
-                    padding: "2px 6px", borderRadius: 4,
-                    textAlign: "center",
-                  }}>{j.symbol}</span>
-                  <span style={{ color: "#94a3b8", fontSize: 11 }}>
-                    {daysAgo(j.posted_date)}
-                  </span>
-                  <span style={{
-                    fontWeight: 500,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }} title={j.title}>{j.title}</span>
-                  <span style={{
-                    color: "#94a3b8", fontSize: 11,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }} title={j.location ?? ""}>
-                    {j.location ?? "—"}
-                  </span>
-                  <span>
-                    {j.dept ? (
-                      <span style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: dc.fg, background: dc.bg,
-                        padding: "2px 7px", borderRadius: 4,
-                        whiteSpace: "nowrap",
-                      }}>{j.dept}</span>
-                    ) : null}
-                  </span>
-                  <span style={{ color: "#475569", fontSize: 14, textAlign: "right" }}>→</span>
-                </a>
-              );
-            })}
-          </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: "#64748b", textAlign: "center" }}>
-            显示 {visible.length} / {filtered.length} 条
-            {visible.length < filtered.length && (
-              <button
-                onClick={() => setShown(shown + PAGE_SIZE)}
-                style={{
-                  marginLeft: 12,
-                  background: "transparent",
-                  border: "1px solid rgba(96,165,250,0.4)",
-                  color: "#93c5fd",
-                  padding: "3px 12px",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  fontSize: 11,
-                }}
-              >加载更多</button>
-            )}
-          </div>
-        </>
+        summaries.map((s) => <SummaryCard key={s.symbol} s={s} />)
       )}
     </div>
   );
-}
-
-function chipStyle(active: boolean): React.CSSProperties {
-  return {
-    fontSize: 10, fontWeight: 600,
-    padding: "3px 9px",
-    borderRadius: 4,
-    border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.5)"}`,
-    background: active ? "rgba(96,165,250,0.18)" : "transparent",
-    color: active ? "#93c5fd" : "#94a3b8",
-    cursor: "pointer",
-  };
 }
