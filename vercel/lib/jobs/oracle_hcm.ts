@@ -42,12 +42,13 @@ export async function fetchOracleHcmJobs(
   let total = Number.POSITIVE_INFINITY;
 
   while (offset < total) {
+    // sortBy/limit/offset must be passed as part of the finder, not top-level params
     const url =
       `https://${cfg.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
-      `?onlyData=true&expand=requisitionList.secondaryLocations,flexFieldsFacet.values` +
+      `?onlyData=true` +
       `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)}` +
       `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES` +
-      `&limit=${PAGE}&offset=${offset}&sortBy=POSTING_DATES_DESC`;
+      `,limit=${PAGE},offset=${offset},sortBy=POSTING_DATES_DESC`;
 
     const res = await fetch(url, {
       headers: { "User-Agent": UA, Accept: "application/json" },

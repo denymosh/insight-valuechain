@@ -7,12 +7,13 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 export async function GET() {
+  // sortBy / limit 都需放进 finder 参数体内，不能作为顶层 URL 参数
   const url =
     `https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
-    `?onlyData=true&expand=requisitionList.secondaryLocations,flexFieldsFacet.values` +
+    `?onlyData=true` +
     `&finder=findReqs;siteNumber=CX_1` +
     `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES` +
-    `&limit=3&offset=0&sortBy=POSTING_DATES_DESC`;
+    `,limit=5,sortBy=POSTING_DATES_DESC`;
 
   try {
     const res = await fetch(url, {
