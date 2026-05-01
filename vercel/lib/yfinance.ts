@@ -209,7 +209,7 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
 
   // Stage 1: v7/quote — market cap, PE ratios, EPS.
   try {
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,epsTrailingTwelveMonths,epsForward&crumb=${encodeURIComponent(freshCrumb)}`;
     const res = await fetch(url, { headers: hdrs });
     if (res.ok) {
       const q = (await res.json())?.quoteResponse?.result?.[0] ?? {};
@@ -217,8 +217,9 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
       out.pe_ttm = numOrNull(q.trailingPE);
       out.pe_fwd = numOrNull(q.forwardPE);
       out.ps_ttm = numOrNull(q.priceToSalesTrailing12Months);
-      const trlEps = numOrNull(q.trailingEps);
-      const fwdEps = numOrNull(q.forwardEps);
+      // v7/quote returns EPS as epsTrailingTwelveMonths / epsForward
+      const trlEps = numOrNull(q.epsTrailingTwelveMonths ?? q.trailingEps);
+      const fwdEps = numOrNull(q.epsForward ?? q.forwardEps);
       if (trlEps != null && fwdEps != null && trlEps !== 0)
         out.growth_fwd = ((fwdEps - trlEps) / Math.abs(trlEps)) * 100;
     }
