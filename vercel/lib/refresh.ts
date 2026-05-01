@@ -148,6 +148,45 @@ export async function refreshDailyOne(symbol: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** IV-only refresh: fetch ATM IV for all symbols, store in iv_history, compute percentile.
+ *  Much faster than refreshDailyAll — only one API call per symbol.
+ *  Runs in batches of 8 in parallel to fit inside 60s timeout. */
+export async function refreshIVAll(): Promise<{ ok: number; fail: number }> {
+  const syms = await listSymbols();
+  let ok = 0, fail = 0;
+  const BATCH = 8;
+  const today = new Date().toISOString().slice(0, 10);
+  for (let i = 0; i < syms.length; i += BATCH) {
+    const batch = syms.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (symbol) => {
+        const rawIV = await fetchIV(symbol);
+        if (rawIV == null || rawIV <= 0) return;
+        const ivPct = rawIV * 100;
+        await sb.from("iv_history").upsert({ symbol, date: today, iv: rawIV }, { onConflict: "symbol,date" });
+        const { data: hist } = await sb.from("iv_history")
+          .select("iv")
+          .eq("symbol", symbol)
+          .order("date", { ascending: false })
+          .limit(252);
+        const patch: any = { symbol, iv: ivPct };
+        if (hist && hist.length >= 5) {
+          const sorted = hist.map((r: any) => r.iv as number).sort((a, b) => a - b);
+          const rank = sorted.filter((v) => v <= rawIV).length;
+          patch.iv_pct = Math.round((rank / sorted.length) * 100);
+        }
+        await sb.from("quotes").upsert(patch, { onConflict: "symbol" });
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled") ok++;
+      else { fail++; console.warn("refreshIV batch error", r.reason); }
+    }
+    if (i + BATCH < syms.length) await sleep(200);
+  }
+  return { ok, fail };
+}
+
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
