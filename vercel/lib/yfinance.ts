@@ -202,9 +202,13 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
 
     const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
     const res = await fetch(url, { headers: { ...BASE_HEADERS, Cookie: freshCookie } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
     const json = await res.json();
     const q = json?.quoteResponse?.result?.[0] ?? {};
+    console.log(`[fundamentals] ${symbol} keys:`, Object.keys(q).join(","));
     out.market_cap = numOrNull(q.marketCap);
     out.pe_ttm = numOrNull(q.trailingPE);
     out.pe_fwd = numOrNull(q.forwardPE);
@@ -222,7 +226,9 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     const rm = numOrNull(q.recommendationMean);
     if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
     out.target_price = numOrNull(q.targetMeanPrice);
-  } catch { /* leave defaults */ }
+  } catch (e) {
+    console.error("[fetchFundamentals] error:", String(e));
+  }
   return out;
 }
 
