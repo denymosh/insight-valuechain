@@ -170,7 +170,7 @@ export async function refreshIVAll(): Promise<{ ok: number; fail: number }> {
           .order("date", { ascending: false })
           .limit(252);
         const patch: any = { symbol, iv: ivPct };
-        if (hist && hist.length >= 5) {
+        if (hist && hist.length >= 1) {
           const sorted = hist.map((r: any) => r.iv as number).sort((a, b) => a - b);
           const rank = sorted.filter((v) => v <= rawIV).length;
           patch.iv_pct = Math.round((rank / sorted.length) * 100);
