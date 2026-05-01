@@ -95,21 +95,24 @@ export async function refreshDailyOne(symbol: string): Promise<void> {
     fetchNextEarnings(symbol),
   ]);
   const snap = computeSnapshot(daily, weekly, monthly);
+  // Remove session_close — not a DB column, causes silent upsert failure in PostgREST
+  const { session_close, ...snapFields } = snap as any;
   const patch: any = {
     symbol,
     source: "yfinance",
     updated_at: new Date().toISOString(),
-    ...snap,
+    ...snapFields,
     ...fund,
     next_earnings: earn,
   };
-  // also recompute change if we got prev_close fresh from snap
-  if (snap.session_close != null && snap.prev_close != null && snap.prev_close !== 0) {
-    patch.last = snap.session_close;
-    patch.change = snap.session_close - snap.prev_close;
+  // Map session_close -> last and compute change
+  if (session_close != null && snap.prev_close != null && snap.prev_close !== 0) {
+    patch.last = session_close;
+    patch.change = session_close - snap.prev_close;
     patch.change_pct = (patch.change / snap.prev_close) * 100;
   }
-  await sb.from("quotes").upsert(patch, { onConflict: "symbol" });
+  const { error } = await sb.from("quotes").upsert(patch, { onConflict: "symbol" });
+  if (error) throw new Error(error.message);
 }
 
 function sleep(ms: number) {
