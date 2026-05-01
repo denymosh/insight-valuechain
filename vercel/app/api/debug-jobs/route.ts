@@ -7,10 +7,10 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 export async function GET() {
-  // 最简形式：仅 finder + siteNumber + facetsList，limit 走顶层 URL 参数
+  // 必须加 expand=requisitionList 才会返回逐条 job
   const url =
     `https://fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
-    `?onlyData=true` +
+    `?onlyData=true&expand=requisitionList.secondaryLocations` +
     `&finder=findReqs;siteNumber=CX_1` +
     `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES` +
     `&limit=5`;

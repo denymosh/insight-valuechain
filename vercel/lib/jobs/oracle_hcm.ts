@@ -42,10 +42,10 @@ export async function fetchOracleHcmJobs(
   let total = Number.POSITIVE_INFINITY;
 
   while (offset < total) {
-    // 最简 URL：limit + offset 顶层；不指定 sortBy（SQL 端排序）
+    // expand=requisitionList 才会返回逐条 job；limit/offset 顶层；不指定 sortBy
     const url =
       `https://${cfg.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
-      `?onlyData=true` +
+      `?onlyData=true&expand=requisitionList.secondaryLocations` +
       `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)}` +
       `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES` +
       `&limit=${PAGE}&offset=${offset}`;
