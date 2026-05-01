@@ -65,7 +65,16 @@ export async function GET() {
   // Call fetchFundamentals directly
   try {
     const f = await fetchFundamentals("NVDA");
-    results.fetchFundamentals = { ok: f.market_cap != null, market_cap: f.market_cap, pe_fwd: f.pe_fwd };
+    results.fetchFundamentals = {
+      ok: f.market_cap != null,
+      market_cap: f.market_cap,
+      pe_fwd: f.pe_fwd,
+      pe_ttm: f.pe_ttm,
+      ws_rating: f.ws_rating,
+      ws_rating_label: f.ws_rating_label,
+      target_price: f.target_price,
+      gross_margin: f.gross_margin,
+    };
   } catch (e: any) {
     results.fetchFundamentals = { ok: false, error: String(e?.message || e) };
   }
