@@ -1,100 +1,141 @@
-// Wrapper around the yahoo-finance2 npm package, exposing the same shapes
-// our indicators / cron tasks expect.
+// Wrapper around Yahoo Finance APIs with cookie+crumb auth to avoid 429 on cloud IPs.
 
-import yahooFinance from "yahoo-finance2";
 import type { Bar } from "./indicators";
-
-// quiet the historical() deprecation banner — we still use it intentionally
-yahooFinance.suppressNotices(["yahooSurvey", "ripHistorical"]);
 
 export type IntradayBar = { t: number; c: number; s: "pre" | "reg" | "post" };
 
-const SECOND = 1000;
-const DAY = 86400 * SECOND;
+const DAY = 86400 * 1000;
 const YEAR = 365 * DAY;
 
-function toBars(rows: any[]): Bar[] {
-  return (rows || [])
-    .filter((r) => r && r.close != null && !Number.isNaN(r.close))
-    .map((r) => ({
-      date: new Date(r.date),
-      open: Number(r.open),
-      high: Number(r.high),
-      low: Number(r.low),
-      close: Number(r.close),
-      volume: Number(r.volume ?? 0),
-    }));
+// ─── Cookie + Crumb cache ────────────────────────────────────────────────────
+let _cookie = "";
+let _crumb = "";
+let _cookieExpiry = 0;
+
+async function ensureCrumb(): Promise<{ cookie: string; crumb: string }> {
+  if (_crumb && Date.now() < _cookieExpiry) return { cookie: _cookie, crumb: _crumb };
+
+  // Step 1: get cookie from fc.yahoo.com
+  const cookieRes = await fetch("https://fc.yahoo.com", {
+    headers: { "User-Agent": UA },
+    redirect: "follow",
+  });
+  const setCookie = cookieRes.headers.get("set-cookie") ?? "";
+  _cookie = setCookie.split(";")[0]; // take first cookie pair
+
+  // Step 2: get crumb
+  const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { ...BASE_HEADERS, Cookie: _cookie },
+  });
+  _crumb = (await crumbRes.text()).trim();
+  _cookieExpiry = Date.now() + 55 * 60 * 1000; // 55-min TTL
+  return { cookie: _cookie, crumb: _crumb };
 }
 
-async function withRetry<T>(fn: () => Promise<T>, fallback: T, retries = 3): Promise<T> {
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const BASE_HEADERS = {
+  "User-Agent": UA,
+  Accept: "application/json",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+// ─── Low-level fetch with retry ─────────────────────────────────────────────
+async function yfFetch(url: string, retries = 3): Promise<any> {
+  const { cookie, crumb } = await ensureCrumb();
+  const sep = url.includes("?") ? "&" : "?";
+  const fullUrl = `${url}${sep}crumb=${encodeURIComponent(crumb)}`;
+
   for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (e: any) {
-      const msg = String(e?.message || e);
-      const isRate = msg.includes("Too Many") || msg.includes("429") || msg.includes("rate");
-      if (isRate && i < retries - 1) {
-        await new Promise(r => setTimeout(r, 2000 * (i + 1))); // 2s, 4s backoff
-        continue;
-      }
-      return fallback;
+    const res = await fetch(fullUrl, {
+      headers: { ...BASE_HEADERS, Cookie: cookie },
+    });
+    if (res.status === 429) {
+      // rate-limited: reset crumb and wait
+      _crumb = "";
+      await sleep(2000 * (i + 1));
+      continue;
     }
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    return res.json();
   }
-  return fallback;
+  throw new Error(`Rate limited after ${retries} retries: ${url}`);
 }
 
-/** ~2 years of daily bars. */
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ─── Chart (bars) ────────────────────────────────────────────────────────────
+async function fetchChart(
+  symbol: string,
+  interval: string,
+  period1: Date
+): Promise<Bar[]> {
+  const p1 = Math.floor(period1.getTime() / 1000);
+  const p2 = Math.floor(Date.now() / 1000);
+  const url =
+    `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
+    `?interval=${interval}&period1=${p1}&period2=${p2}&includePrePost=false`;
+  try {
+    const json = await yfFetch(url);
+    const result = json?.chart?.result?.[0];
+    if (!result) return [];
+    const timestamps: number[] = result.timestamp ?? [];
+    const ohlcv = result.indicators?.quote?.[0] ?? {};
+    return timestamps
+      .map((t, i) => ({
+        date: new Date(t * 1000),
+        open: Number(ohlcv.open?.[i]),
+        high: Number(ohlcv.high?.[i]),
+        low: Number(ohlcv.low?.[i]),
+        close: Number(ohlcv.close?.[i]),
+        volume: Number(ohlcv.volume?.[i] ?? 0),
+      }))
+      .filter((b) => Number.isFinite(b.close) && b.close > 0);
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchDaily(symbol: string): Promise<Bar[]> {
-  const period1 = new Date(Date.now() - 2 * YEAR);
-  return withRetry(async () => {
-    const rows = await yahooFinance.chart(symbol, { period1, interval: "1d" });
-    return toBars(rows.quotes);
-  }, []);
+  return fetchChart(symbol, "1d", new Date(Date.now() - 2 * YEAR));
 }
 
-/** ~5 years of weekly bars. */
 export async function fetchWeekly(symbol: string): Promise<Bar[]> {
-  const period1 = new Date(Date.now() - 5 * YEAR);
-  return withRetry(async () => {
-    const rows = await yahooFinance.chart(symbol, { period1, interval: "1wk" });
-    return toBars(rows.quotes);
-  }, []);
+  return fetchChart(symbol, "1wk", new Date(Date.now() - 5 * YEAR));
 }
 
-/** ~15 years of monthly bars. */
 export async function fetchMonthly(symbol: string): Promise<Bar[]> {
-  const period1 = new Date(Date.now() - 15 * YEAR);
-  return withRetry(async () => {
-    const rows = await yahooFinance.chart(symbol, { period1, interval: "1mo" });
-    return toBars(rows.quotes);
-  }, []);
+  return fetchChart(symbol, "1mo", new Date(Date.now() - 15 * YEAR));
 }
 
-/** Today's 15-minute bars across pre / regular / after-hours. */
+// ─── Intraday 15m ────────────────────────────────────────────────────────────
 export async function fetchIntraday15m(symbol: string): Promise<IntradayBar[]> {
   try {
-    const period1 = new Date(Date.now() - 1 * DAY);
-    const rows = await yahooFinance.chart(symbol, {
-      period1,
-      interval: "15m",
-      includePrePost: true,
-    });
-    const bars = rows?.quotes ?? [];
+    const p1 = Math.floor((Date.now() - DAY) / 1000);
+    const p2 = Math.floor(Date.now() / 1000);
+    const url =
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
+      `?interval=15m&period1=${p1}&period2=${p2}&includePrePost=true`;
+    const json = await yfFetch(url);
+    const result = json?.chart?.result?.[0];
+    if (!result) return [];
+    const timestamps: number[] = result.timestamp ?? [];
+    const ohlcv = result.indicators?.quote?.[0] ?? {};
     const out: IntradayBar[] = [];
-    for (const r of bars) {
-      const c = Number(r.close);
+    for (let i = 0; i < timestamps.length; i++) {
+      const c = Number(ohlcv.close?.[i]);
       if (!Number.isFinite(c)) continue;
-      const d = new Date(r.date);
-      // Convert UTC to ET to classify session
+      const d = new Date(timestamps[i] * 1000);
       const etHour = etHourOf(d);
       const etMin = etMinuteOf(d);
       const totalMin = etHour * 60 + etMin;
       let s: "pre" | "reg" | "post" | null = null;
-      if (totalMin >= 4 * 60 && totalMin < 9 * 60 + 30) s = "pre";
-      else if (totalMin >= 9 * 60 + 30 && totalMin < 16 * 60) s = "reg";
-      else if (totalMin >= 16 * 60 && totalMin < 20 * 60) s = "post";
-      if (!s) continue;
-      out.push({ t: d.getTime(), c, s });
+      if (totalMin >= 240 && totalMin < 570) s = "pre";
+      else if (totalMin >= 570 && totalMin < 960) s = "reg";
+      else if (totalMin >= 960 && totalMin < 1200) s = "post";
+      if (s) out.push({ t: d.getTime(), c, s });
     }
     return out;
   } catch {
@@ -102,19 +143,24 @@ export async function fetchIntraday15m(symbol: string): Promise<IntradayBar[]> {
   }
 }
 
-/** Latest live-ish quote (delayed ~15min on Yahoo's free feed). */
+// ─── Live quote ──────────────────────────────────────────────────────────────
 export async function fetchLiveQuote(
   symbol: string
 ): Promise<{ last: number | null; prev_close: number | null }> {
-  return withRetry(async () => {
-    const q = await yahooFinance.quote(symbol);
+  try {
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    const json = await yfFetch(url);
+    const meta = json?.chart?.result?.[0]?.meta ?? {};
     return {
-      last: numOrNull(q.regularMarketPrice ?? q.postMarketPrice ?? q.preMarketPrice),
-      prev_close: numOrNull(q.regularMarketPreviousClose),
+      last: numOrNull(meta.regularMarketPrice ?? meta.chartPreviousClose),
+      prev_close: numOrNull(meta.previousClose ?? meta.chartPreviousClose),
     };
-  }, { last: null, prev_close: null });
+  } catch {
+    return { last: null, prev_close: null };
+  }
 }
 
+// ─── Fundamentals ────────────────────────────────────────────────────────────
 export type Fundamentals = {
   market_cap: number | null;
   pe_ttm: number | null;
@@ -130,48 +176,24 @@ export type Fundamentals = {
 };
 
 const WS_LABELS: Record<number, string> = {
-  1: "Strong Buy",
-  2: "Buy",
-  3: "Hold",
-  4: "Sell",
-  5: "Strong Sell",
+  1: "Strong Buy", 2: "Buy", 3: "Hold", 4: "Sell", 5: "Strong Sell",
 };
 
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
-  return withRetry(() => _fetchFundamentals(symbol), {
+  const out: Fundamentals = {
     market_cap: null, pe_ttm: null, pe_fwd: null, ps_ttm: null,
     growth_yoy: null, growth_fwd: null, gross_margin: null,
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
-  });
-}
-
-async function _fetchFundamentals(symbol: string): Promise<Fundamentals> {
-  const out: Fundamentals = {
-    market_cap: null,
-    pe_ttm: null,
-    pe_fwd: null,
-    ps_ttm: null,
-    growth_yoy: null,
-    growth_fwd: null,
-    gross_margin: null,
-    ebitda_margin: null,
-    ws_rating: null,
-    ws_rating_label: null,
-    target_price: null,
   };
   try {
-    const sum = await yahooFinance.quoteSummary(symbol, {
-      modules: [
-        "summaryDetail",
-        "defaultKeyStatistics",
-        "financialData",
-        "price",
-      ],
-    });
-    const sd = (sum as any).summaryDetail || {};
-    const ks = (sum as any).defaultKeyStatistics || {};
-    const fd = (sum as any).financialData || {};
-    const pr = (sum as any).price || {};
+    const modules = "summaryDetail,defaultKeyStatistics,financialData,price";
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+    const json = await yfFetch(url);
+    const res = json?.quoteSummary?.result?.[0] ?? {};
+    const sd = res.summaryDetail ?? {};
+    const ks = res.defaultKeyStatistics ?? {};
+    const fd = res.financialData ?? {};
+    const pr = res.price ?? {};
     out.market_cap = numOrNull(pr.marketCap ?? sd.marketCap);
     out.pe_ttm = numOrNull(sd.trailingPE);
     out.pe_fwd = numOrNull(sd.forwardPE ?? ks.forwardPE);
@@ -180,78 +202,60 @@ async function _fetchFundamentals(symbol: string): Promise<Fundamentals> {
     if (rg !== null) out.growth_yoy = rg * 100;
     const trlEps = numOrNull(ks.trailingEps);
     const fwdEps = numOrNull(ks.forwardEps);
-    if (trlEps != null && fwdEps != null && trlEps !== 0) {
+    if (trlEps != null && fwdEps != null && trlEps !== 0)
       out.growth_fwd = ((fwdEps - trlEps) / Math.abs(trlEps)) * 100;
-    }
     const gm = numOrNull(fd.grossMargins);
     if (gm !== null) out.gross_margin = gm * 100;
     const em = numOrNull(fd.ebitdaMargins);
     if (em !== null) out.ebitda_margin = em * 100;
     const rm = numOrNull(fd.recommendationMean);
-    if (rm !== null) {
-      out.ws_rating = rm;
-      out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null;
-    }
+    if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
     out.target_price = numOrNull(fd.targetMeanPrice);
-  } catch {
-    /* leave defaults */
-  }
+  } catch { /* leave defaults */ }
   return out;
 }
 
-/** Next earnings within 45 days, else null. */
+// ─── Next earnings ───────────────────────────────────────────────────────────
 export async function fetchNextEarnings(
   symbol: string
 ): Promise<{ date: string; time: "bmo" | "amc" | "unknown"; days: number } | null> {
-  return withRetry(async () => {
-    const sum = await yahooFinance.quoteSummary(symbol, {
-      modules: ["calendarEvents", "earnings"],
-    });
-    const ce = (sum as any).calendarEvents || {};
+  try {
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=calendarEvents`;
+    const json = await yfFetch(url);
+    const ce = json?.quoteSummary?.result?.[0]?.calendarEvents ?? {};
     const dates: any[] = ce.earnings?.earningsDate ?? [];
     if (!dates.length) return null;
     const now = new Date();
     const cutoff = new Date(Date.now() + 45 * DAY);
     let next: Date | null = null;
     for (const d of dates) {
-      const dt = d instanceof Date ? d : new Date(d);
-      if (dt > now && dt <= cutoff) {
-        if (!next || dt < next) next = dt;
-      }
+      const dt = new Date(typeof d === "object" && "raw" in d ? d.raw * 1000 : d);
+      if (dt > now && dt <= cutoff) { if (!next || dt < next) next = dt; }
     }
     if (!next) return null;
     const days = Math.round((next.getTime() - now.getTime()) / DAY);
     const etHour = etHourOf(next);
-    let time: "bmo" | "amc" | "unknown" = "unknown";
-    if (etHour >= 5 && etHour < 9) time = "bmo";
-    else if (etHour >= 16) time = "amc";
+    const time: "bmo" | "amc" | "unknown" =
+      etHour >= 5 && etHour < 9 ? "bmo" : etHour >= 16 ? "amc" : "unknown";
     return { date: next.toISOString().slice(0, 10), time, days };
-  }, null);
+  } catch { return null; }
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function numOrNull(v: any): number | null {
   if (v == null) return null;
-  // Handle Yahoo's {raw, fmt} wrapping
   const raw = typeof v === "object" && "raw" in v ? v.raw : v;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 }
 
-// ---------- ET helpers (no external timezone library) ----------
-// US/Eastern timezone offset is UTC-5 or UTC-4 depending on DST.
-// Using Intl.DateTimeFormat for accuracy.
 function etHourOf(d: Date): number {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    hour: "numeric",
-    hour12: false,
-  });
-  return Number(fmt.format(d));
+  return Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false }).format(d)
+  );
 }
 function etMinuteOf(d: Date): number {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    minute: "2-digit",
-  });
-  return Number(fmt.format(d));
+  return Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", minute: "2-digit" }).format(d)
+  );
 }
