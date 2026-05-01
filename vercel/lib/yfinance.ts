@@ -192,9 +192,21 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
   };
   try {
-    // Use the shared yfFetch helper (cookie+crumb auth, retry on 429)
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps`;
-    const json = await yfFetch(url);
+    // v7/quote requires its own independent cookie/crumb session (separate from v8/chart).
+    // Use ONLY User-Agent + Cookie — extra headers (Accept, Accept-Language) cause empty results.
+    const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "follow" });
+    const freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
+    const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": UA, Cookie: freshCookie },
+    });
+    const freshCrumb = (await crumbRes.text()).trim();
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA, Cookie: freshCookie } });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const json = await res.json();
     const q = json?.quoteResponse?.result?.[0] ?? {};
     out.market_cap = numOrNull(q.marketCap);
     out.pe_ttm = numOrNull(q.trailingPE);
