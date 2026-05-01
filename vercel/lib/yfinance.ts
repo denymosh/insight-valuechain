@@ -227,7 +227,8 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
     out.target_price = numOrNull(q.targetMeanPrice);
   } catch (e) {
-    console.error("[fetchFundamentals] error:", String(e));
+    // Temporarily rethrow so callers can see the error
+    throw e;
   }
   return out;
 }
