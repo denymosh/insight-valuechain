@@ -157,8 +157,17 @@ export async function fetchLiveQuote(
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
     const json = await yfFetch(url);
     const meta = json?.chart?.result?.[0]?.meta ?? {};
+    const state: string = meta.marketState ?? "";
+    const regular = numOrNull(meta.regularMarketPrice ?? meta.chartPreviousClose);
+    // During pre/post-market show extended-hours price when available
+    let last = regular;
+    if ((state === "PRE" || state === "PREPRE") && meta.preMarketPrice) {
+      last = numOrNull(meta.preMarketPrice) ?? regular;
+    } else if ((state === "POST" || state === "POSTPOST") && meta.postMarketPrice) {
+      last = numOrNull(meta.postMarketPrice) ?? regular;
+    }
     return {
-      last: numOrNull(meta.regularMarketPrice ?? meta.chartPreviousClose),
+      last,
       prev_close: numOrNull(meta.previousClose ?? meta.chartPreviousClose),
     };
   } catch {
