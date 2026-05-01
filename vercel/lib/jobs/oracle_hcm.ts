@@ -68,7 +68,9 @@ export async function fetchOracleHcmJobs(
       const title: string = it.Title ?? "";
       const primary: string | null = it.PrimaryLocation ?? null;
       const country: string | null = it.PrimaryLocationCountry ?? null;
-      const dept: string | null = it.Category ?? it.Organization ?? null;
+      // Nokia 逐条 job 不带 Department；尝试 Department → Organization → JobFamily → JobFunction
+      const dept: string | null =
+        it.Department ?? it.Organization ?? it.JobFamily ?? it.JobFunction ?? null;
       const posted: string | null = it.PostedDate ?? it.ExternalPostedStartDate ?? null;
       if (!title || !posted) continue;
 
