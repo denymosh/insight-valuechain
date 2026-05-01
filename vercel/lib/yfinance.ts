@@ -227,10 +227,12 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
 
   // Stage 2: v10/quoteSummary/financialData — margins, analyst ratings, revenue growth.
   try {
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData&crumb=${encodeURIComponent(freshCrumb)}`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,summaryDetail&crumb=${encodeURIComponent(freshCrumb)}`;
     const res = await fetch(url, { headers: hdrs });
     if (res.ok) {
-      const fd = (await res.json())?.quoteSummary?.result?.[0]?.financialData ?? {};
+      const r0 = (await res.json())?.quoteSummary?.result?.[0] ?? {};
+      const fd = r0.financialData ?? {};
+      const sd = r0.summaryDetail ?? {};
       const rg = numOrNull(fd.revenueGrowth);
       if (rg !== null) out.growth_yoy = rg * 100;
       const gm = numOrNull(fd.grossMargins);
@@ -240,6 +242,7 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
       const rm = numOrNull(fd.recommendationMean);
       if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
       out.target_price = numOrNull(fd.targetMeanPrice);
+      out.ps_ttm = numOrNull(sd.priceToSalesTrailing12Months);
     }
   } catch (e) { console.error("[fetchFundamentals] quoteSummary error:", String(e)); }
 
