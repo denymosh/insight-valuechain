@@ -7,28 +7,34 @@ export type IntradayBar = { t: number; c: number; s: "pre" | "reg" | "post" };
 const DAY = 86400 * 1000;
 const YEAR = 365 * DAY;
 
-// ─── Cookie + Crumb cache ────────────────────────────────────────────────────
+// ─── Cookie + Crumb cache (with mutex to prevent parallel fetches) ───────────
 let _cookie = "";
 let _crumb = "";
 let _cookieExpiry = 0;
+let _crumbInflight: Promise<{ cookie: string; crumb: string }> | null = null;
 
 async function ensureCrumb(): Promise<{ cookie: string; crumb: string }> {
   if (_crumb && Date.now() < _cookieExpiry) return { cookie: _cookie, crumb: _crumb };
+  // If another call is already fetching the crumb, wait for it instead of firing a parallel request
+  if (_crumbInflight) return _crumbInflight;
+  _crumbInflight = _fetchCrumb().finally(() => { _crumbInflight = null; });
+  return _crumbInflight;
+}
 
-  // Step 1: get cookie from fc.yahoo.com
+async function _fetchCrumb(): Promise<{ cookie: string; crumb: string }> {
+  // Step 1: get cookie
   const cookieRes = await fetch("https://fc.yahoo.com", {
     headers: { "User-Agent": UA },
     redirect: "follow",
   });
   const setCookie = cookieRes.headers.get("set-cookie") ?? "";
-  _cookie = setCookie.split(";")[0]; // take first cookie pair
-
+  _cookie = setCookie.split(";")[0];
   // Step 2: get crumb
   const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
     headers: { ...BASE_HEADERS, Cookie: _cookie },
   });
   _crumb = (await crumbRes.text()).trim();
-  _cookieExpiry = Date.now() + 55 * 60 * 1000; // 55-min TTL
+  _cookieExpiry = Date.now() + 55 * 60 * 1000;
   return { cookie: _cookie, crumb: _crumb };
 }
 
