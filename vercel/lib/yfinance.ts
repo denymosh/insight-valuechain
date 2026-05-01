@@ -185,6 +185,10 @@ const WS_LABELS: Record<number, string> = {
   1: "Strong Buy", 2: "Buy", 3: "Hold", 4: "Sell", 5: "Strong Sell",
 };
 
+// Debug capture for last fetchFundamentals call (read by debug-yf route)
+let _fundDebug: any = null;
+export function getFundDebug() { return _fundDebug; }
+
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const out: Fundamentals = {
     market_cap: null, pe_ttm: null, pe_fwd: null, ps_ttm: null,
@@ -193,21 +197,23 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   };
   try {
     // v7/quote requires its own independent cookie/crumb session (separate from v8/chart).
-    // Use ONLY User-Agent + Cookie — extra headers (Accept, Accept-Language) cause empty results.
     const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "follow" });
     const freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
     const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
       headers: { "User-Agent": UA, Cookie: freshCookie },
     });
     const freshCrumb = (await crumbRes.text()).trim();
+    _fundDebug = { cookie_len: freshCookie.length, crumb_len: freshCrumb.length, crumb: freshCrumb };
     const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
     const res = await fetch(url, { headers: { "User-Agent": UA, Cookie: freshCookie } });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-    }
-    const json = await res.json();
+    _fundDebug.http_status = res.status;
+    const body = await res.text();
+    _fundDebug.raw = body.slice(0, 300);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+    const json = JSON.parse(body);
     const q = json?.quoteResponse?.result?.[0] ?? {};
+    _fundDebug.result_keys = Object.keys(q).length;
+    _fundDebug.market_cap = q.marketCap;
     out.market_cap = numOrNull(q.marketCap);
     out.pe_ttm = numOrNull(q.trailingPE);
     out.pe_fwd = numOrNull(q.forwardPE);
@@ -226,6 +232,7 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
     out.target_price = numOrNull(q.targetMeanPrice);
   } catch (e) {
+    if (_fundDebug) _fundDebug.error = String(e);
     console.error("[fetchFundamentals] error:", String(e));
   }
   return out;

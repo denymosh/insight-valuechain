@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchDaily, fetchLiveQuote, fetchFundamentals } from "@/lib/yfinance";
+import { fetchDaily, fetchLiveQuote, fetchFundamentals, getFundDebug } from "@/lib/yfinance";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -74,9 +74,10 @@ export async function GET() {
       ws_rating_label: f.ws_rating_label,
       target_price: f.target_price,
       gross_margin: f.gross_margin,
+      _debug: getFundDebug(),
     };
   } catch (e: any) {
-    results.fetchFundamentals = { ok: false, error: String(e?.message || e) };
+    results.fetchFundamentals = { ok: false, error: String(e?.message || e), _debug: getFundDebug() };
   }
 
   // Directly replicate fetchFundamentals logic with full error exposure
