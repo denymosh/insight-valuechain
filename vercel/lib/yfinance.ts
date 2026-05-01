@@ -186,31 +186,27 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
   };
   try {
-    const modules = "summaryDetail,defaultKeyStatistics,financialData,price";
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+    // v7 quote API — returns flat fields, works well on cloud IPs
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps`;
     const json = await yfFetch(url);
-    const res = json?.quoteSummary?.result?.[0] ?? {};
-    const sd = res.summaryDetail ?? {};
-    const ks = res.defaultKeyStatistics ?? {};
-    const fd = res.financialData ?? {};
-    const pr = res.price ?? {};
-    out.market_cap = numOrNull(pr.marketCap ?? sd.marketCap);
-    out.pe_ttm = numOrNull(sd.trailingPE);
-    out.pe_fwd = numOrNull(sd.forwardPE ?? ks.forwardPE);
-    out.ps_ttm = numOrNull(sd.priceToSalesTrailing12Months);
-    const rg = numOrNull(fd.revenueGrowth);
+    const q = json?.quoteResponse?.result?.[0] ?? {};
+    out.market_cap = numOrNull(q.marketCap);
+    out.pe_ttm = numOrNull(q.trailingPE);
+    out.pe_fwd = numOrNull(q.forwardPE);
+    out.ps_ttm = numOrNull(q.priceToSalesTrailing12Months);
+    const rg = numOrNull(q.revenueGrowth);
     if (rg !== null) out.growth_yoy = rg * 100;
-    const trlEps = numOrNull(ks.trailingEps);
-    const fwdEps = numOrNull(ks.forwardEps);
+    const trlEps = numOrNull(q.trailingEps);
+    const fwdEps = numOrNull(q.forwardEps);
     if (trlEps != null && fwdEps != null && trlEps !== 0)
       out.growth_fwd = ((fwdEps - trlEps) / Math.abs(trlEps)) * 100;
-    const gm = numOrNull(fd.grossMargins);
+    const gm = numOrNull(q.grossMargins);
     if (gm !== null) out.gross_margin = gm * 100;
-    const em = numOrNull(fd.ebitdaMargins);
+    const em = numOrNull(q.ebitdaMargins);
     if (em !== null) out.ebitda_margin = em * 100;
-    const rm = numOrNull(fd.recommendationMean);
+    const rm = numOrNull(q.recommendationMean);
     if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
-    out.target_price = numOrNull(fd.targetMeanPrice);
+    out.target_price = numOrNull(q.targetMeanPrice);
   } catch { /* leave defaults */ }
   return out;
 }
