@@ -34,10 +34,13 @@ export async function refreshPricesAll(): Promise<{ ok: number; fail: number }> 
           fetchIntraday15m(symbol),
         ]);
         const patch: any = { symbol, source: "yfinance", updated_at: new Date().toISOString() };
-        if (live.last != null) patch.last = live.last;
+        // Use last intraday bar as price (covers pre/post-market); fall back to regularMarketPrice
+        const lastBar = intraday.length > 0 ? intraday[intraday.length - 1] : null;
+        const last = lastBar?.c ?? live.last;
+        if (last != null) patch.last = last;
         if (live.prev_close != null) patch.prev_close = live.prev_close;
-        if (live.last != null && live.prev_close != null && live.prev_close !== 0) {
-          patch.change = live.last - live.prev_close;
+        if (last != null && live.prev_close != null && live.prev_close !== 0) {
+          patch.change = last - live.prev_close;
           patch.change_pct = (patch.change / live.prev_close) * 100;
         }
         if (intraday.length) patch.intraday_15m = intraday;
@@ -61,10 +64,12 @@ export async function refreshPriceOne(symbol: string): Promise<void> {
     fetchIntraday15m(symbol),
   ]);
   const patch: any = { symbol, source: "yfinance", updated_at: new Date().toISOString() };
-  if (live.last != null) patch.last = live.last;
+  const lastBar = intraday.length > 0 ? intraday[intraday.length - 1] : null;
+  const last = lastBar?.c ?? live.last;
+  if (last != null) patch.last = last;
   if (live.prev_close != null) patch.prev_close = live.prev_close;
-  if (live.last != null && live.prev_close != null && live.prev_close !== 0) {
-    patch.change = live.last - live.prev_close;
+  if (last != null && live.prev_close != null && live.prev_close !== 0) {
+    patch.change = last - live.prev_close;
     patch.change_pct = (patch.change / live.prev_close) * 100;
   }
   if (intraday.length) patch.intraday_15m = intraday;
