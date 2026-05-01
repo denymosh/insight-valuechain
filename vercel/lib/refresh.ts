@@ -20,32 +20,36 @@ async function listSymbols(): Promise<string[]> {
   return Array.from(set);
 }
 
-/** Hot loop: latest price + 15m intraday. Run every ~5 min. */
+/** Hot loop: latest price + 15m intraday. Run every ~5 min.
+ *  Processes symbols in batches of 5 in parallel → fits inside 30s cron timeout. */
 export async function refreshPricesAll(): Promise<{ ok: number; fail: number }> {
   const syms = await listSymbols();
   let ok = 0, fail = 0;
-  // Process serially with small spacing to respect Yahoo throttling.
-  for (const symbol of syms) {
-    try {
-      const [live, intraday] = await Promise.all([
-        fetchLiveQuote(symbol),
-        fetchIntraday15m(symbol),
-      ]);
-      const patch: any = { symbol, source: "yfinance", updated_at: new Date().toISOString() };
-      if (live.last != null) patch.last = live.last;
-      if (live.prev_close != null) patch.prev_close = live.prev_close;
-      if (live.last != null && live.prev_close != null && live.prev_close !== 0) {
-        patch.change = live.last - live.prev_close;
-        patch.change_pct = (patch.change / live.prev_close) * 100;
-      }
-      if (intraday.length) patch.intraday_15m = intraday;
-      await sb.from("quotes").upsert(patch, { onConflict: "symbol" });
-      ok++;
-    } catch (e) {
-      console.warn("refreshPrices", symbol, e);
-      fail++;
+  const BATCH = 5;
+  for (let i = 0; i < syms.length; i += BATCH) {
+    const batch = syms.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (symbol) => {
+        const [live, intraday] = await Promise.all([
+          fetchLiveQuote(symbol),
+          fetchIntraday15m(symbol),
+        ]);
+        const patch: any = { symbol, source: "yfinance", updated_at: new Date().toISOString() };
+        if (live.last != null) patch.last = live.last;
+        if (live.prev_close != null) patch.prev_close = live.prev_close;
+        if (live.last != null && live.prev_close != null && live.prev_close !== 0) {
+          patch.change = live.last - live.prev_close;
+          patch.change_pct = (patch.change / live.prev_close) * 100;
+        }
+        if (intraday.length) patch.intraday_15m = intraday;
+        await sb.from("quotes").upsert(patch, { onConflict: "symbol" });
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled") ok++;
+      else { fail++; console.warn("refreshPrices batch error", r.reason); }
     }
-    await sleep(400);
+    if (i + BATCH < syms.length) await sleep(300); // short pause between batches
   }
   return { ok, fail };
 }

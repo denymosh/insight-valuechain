@@ -192,9 +192,18 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
   };
   try {
-    // v7 quote API — returns flat fields, works well on cloud IPs
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps`;
-    const json = await yfFetch(url);
+    // Fetch fresh cookie/crumb independently (v7 quote uses a different cookie scope)
+    const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "follow" });
+    const freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
+    const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { ...BASE_HEADERS, Cookie: freshCookie },
+    });
+    const freshCrumb = (await crumbRes.text()).trim();
+
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
+    const res = await fetch(url, { headers: { ...BASE_HEADERS, Cookie: freshCookie } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
     const q = json?.quoteResponse?.result?.[0] ?? {};
     out.market_cap = numOrNull(q.marketCap);
     out.pe_ttm = numOrNull(q.trailingPE);
