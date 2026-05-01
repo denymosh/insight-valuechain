@@ -297,19 +297,37 @@ export async function fetchIV(symbol: string): Promise<number | null> {
     const freshCrumb = (await crumbRes.text()).trim();
     if (!freshCrumb) return null;
 
-    const url = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(freshCrumb)}`;
-    const res = await fetch(url, { headers: { "User-Agent": UA, Cookie: freshCookie } });
-    if (!res.ok) return null;
-    const json = await res.json();
+    const hdrs = { "User-Agent": UA, Cookie: freshCookie };
+    const base = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
 
-    const result = json?.optionChain?.result?.[0];
-    if (!result) return null;
+    // First call: get nearest expiry + list of all expiration dates
+    const res0 = await fetch(`${base}?crumb=${encodeURIComponent(freshCrumb)}`, { headers: hdrs });
+    if (!res0.ok) return null;
+    const json0 = await res0.json();
+    const result0 = json0?.optionChain?.result?.[0];
+    if (!result0) return null;
 
-    const currentPrice: number | null = numOrNull(result.quote?.regularMarketPrice);
+    const currentPrice: number | null = numOrNull(result0.quote?.regularMarketPrice);
     if (currentPrice == null || currentPrice <= 0) return null;
 
-    // Use the first (nearest) expiry options chain
-    const opts = result.options?.[0];
+    // Pick an expiry 20–60 days out (avoids near-expiry IV distortion)
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expDates: number[] = result0.expirationDates ?? [];
+    const targetExp = expDates.find((d) => {
+      const days = (d - nowSec) / 86400;
+      return days >= 20 && days <= 60;
+    });
+
+    // If nearest expiry is already >= 14 days out, use it; otherwise fetch target
+    let opts = result0.options?.[0];
+    const nearestDays = opts?.expirationDate ? (opts.expirationDate - nowSec) / 86400 : 0;
+    if (targetExp && nearestDays < 14) {
+      const res1 = await fetch(`${base}?date=${targetExp}&crumb=${encodeURIComponent(freshCrumb)}`, { headers: hdrs });
+      if (res1.ok) {
+        const json1 = await res1.json();
+        opts = json1?.optionChain?.result?.[0]?.options?.[0] ?? opts;
+      }
+    }
     if (!opts) return null;
 
     const calls: any[] = opts.calls ?? [];
