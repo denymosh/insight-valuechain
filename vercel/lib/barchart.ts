@@ -30,16 +30,29 @@ export async function fetchBarchartIV(symbol: string): Promise<BarchartIV> {
       return out;
     }
 
-    // Extract all Set-Cookie headers
-    const rawCookies: string[] = (pageRes.headers as any).getSetCookie?.() ?? [];
+    // Extract all Set-Cookie headers — try multiple methods for runtime compat
+    let rawCookies: string[] = [];
+    const h: any = pageRes.headers;
+    if (typeof h.getSetCookie === "function") rawCookies = h.getSetCookie();
+    if (rawCookies.length === 0 && typeof h.raw === "function") {
+      const r = h.raw();
+      if (Array.isArray(r["set-cookie"])) rawCookies = r["set-cookie"];
+    }
+    if (rawCookies.length === 0) {
+      const sc = pageRes.headers.get("set-cookie");
+      if (sc) rawCookies = [sc];
+    }
+
     const cookieStr = rawCookies.map((c) => c.split(";")[0]).join("; ");
     const xsrfRaw = rawCookies.find((c) => c.startsWith("XSRF-TOKEN="));
     const xsrfTokenEncoded = xsrfRaw ? xsrfRaw.split(";")[0].replace("XSRF-TOKEN=", "") : "";
-    // Cookie value is URL-encoded; X-XSRF-TOKEN header needs the decoded value
     const xsrfToken = xsrfTokenEncoded ? decodeURIComponent(xsrfTokenEncoded) : "";
 
     if (!xsrfToken) {
-      out.status = "no XSRF token";
+      // Also list all response header keys to see what Barchart returns
+      const keys: string[] = [];
+      pageRes.headers.forEach((_, k) => keys.push(k));
+      out.status = `no XSRF token (cookies count=${rawCookies.length}, headers=${keys.join(",")})`;
       return out;
     }
 
