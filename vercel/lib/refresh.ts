@@ -45,8 +45,7 @@ export async function refreshPricesAll(): Promise<{ ok: number; fail: number }> 
       console.warn("refreshPrices", symbol, e);
       fail++;
     }
-    // tiny delay to avoid bursting yahoo in a tight loop
-    await sleep(150);
+    await sleep(400);
   }
   return { ok, fail };
 }
@@ -81,7 +80,7 @@ export async function refreshDailyAll(): Promise<{ ok: number; fail: number }> {
       console.warn("refreshDaily", symbol, e);
       fail++;
     }
-    await sleep(250);
+    await sleep(600);
   }
   return { ok, fail };
 }

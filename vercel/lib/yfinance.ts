@@ -26,46 +26,48 @@ function toBars(rows: any[]): Bar[] {
     }));
 }
 
+async function withRetry<T>(fn: () => Promise<T>, fallback: T, retries = 3): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      const isRate = msg.includes("Too Many") || msg.includes("429") || msg.includes("rate");
+      if (isRate && i < retries - 1) {
+        await new Promise(r => setTimeout(r, 2000 * (i + 1))); // 2s, 4s backoff
+        continue;
+      }
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 /** ~2 years of daily bars. */
 export async function fetchDaily(symbol: string): Promise<Bar[]> {
   const period1 = new Date(Date.now() - 2 * YEAR);
-  try {
-    const rows = await yahooFinance.chart(symbol, {
-      period1,
-      interval: "1d",
-    });
+  return withRetry(async () => {
+    const rows = await yahooFinance.chart(symbol, { period1, interval: "1d" });
     return toBars(rows.quotes);
-  } catch {
-    return [];
-  }
+  }, []);
 }
 
 /** ~5 years of weekly bars. */
 export async function fetchWeekly(symbol: string): Promise<Bar[]> {
   const period1 = new Date(Date.now() - 5 * YEAR);
-  try {
-    const rows = await yahooFinance.chart(symbol, {
-      period1,
-      interval: "1wk",
-    });
+  return withRetry(async () => {
+    const rows = await yahooFinance.chart(symbol, { period1, interval: "1wk" });
     return toBars(rows.quotes);
-  } catch {
-    return [];
-  }
+  }, []);
 }
 
 /** ~15 years of monthly bars. */
 export async function fetchMonthly(symbol: string): Promise<Bar[]> {
   const period1 = new Date(Date.now() - 15 * YEAR);
-  try {
-    const rows = await yahooFinance.chart(symbol, {
-      period1,
-      interval: "1mo",
-    });
+  return withRetry(async () => {
+    const rows = await yahooFinance.chart(symbol, { period1, interval: "1mo" });
     return toBars(rows.quotes);
-  } catch {
-    return [];
-  }
+  }, []);
 }
 
 /** Today's 15-minute bars across pre / regular / after-hours. */
@@ -104,15 +106,13 @@ export async function fetchIntraday15m(symbol: string): Promise<IntradayBar[]> {
 export async function fetchLiveQuote(
   symbol: string
 ): Promise<{ last: number | null; prev_close: number | null }> {
-  try {
+  return withRetry(async () => {
     const q = await yahooFinance.quote(symbol);
     return {
       last: numOrNull(q.regularMarketPrice ?? q.postMarketPrice ?? q.preMarketPrice),
       prev_close: numOrNull(q.regularMarketPreviousClose),
     };
-  } catch {
-    return { last: null, prev_close: null };
-  }
+  }, { last: null, prev_close: null });
 }
 
 export type Fundamentals = {
@@ -138,6 +138,14 @@ const WS_LABELS: Record<number, string> = {
 };
 
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
+  return withRetry(() => _fetchFundamentals(symbol), {
+    market_cap: null, pe_ttm: null, pe_fwd: null, ps_ttm: null,
+    growth_yoy: null, growth_fwd: null, gross_margin: null,
+    ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
+  });
+}
+
+async function _fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const out: Fundamentals = {
     market_cap: null,
     pe_ttm: null,
@@ -195,7 +203,7 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
 export async function fetchNextEarnings(
   symbol: string
 ): Promise<{ date: string; time: "bmo" | "amc" | "unknown"; days: number } | null> {
-  try {
+  return withRetry(async () => {
     const sum = await yahooFinance.quoteSummary(symbol, {
       modules: ["calendarEvents", "earnings"],
     });
@@ -217,14 +225,8 @@ export async function fetchNextEarnings(
     let time: "bmo" | "amc" | "unknown" = "unknown";
     if (etHour >= 5 && etHour < 9) time = "bmo";
     else if (etHour >= 16) time = "amc";
-    return {
-      date: next.toISOString().slice(0, 10),
-      time,
-      days,
-    };
-  } catch {
-    return null;
-  }
+    return { date: next.toISOString().slice(0, 10), time, days };
+  }, null);
 }
 
 function numOrNull(v: any): number | null {
