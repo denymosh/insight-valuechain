@@ -191,16 +191,26 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     growth_yoy: null, growth_fwd: null, gross_margin: null,
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
   };
-  // Stage 1: v7/quote — market metrics. Needs its own fresh cookie/crumb (v7 rejects shared crumb).
+  // Fetch fresh cookie/crumb once — used for both v7/quote and v10/quoteSummary.
+  // (Yahoo v7 rejects the shared crumb from ensureCrumb, so we always fetch fresh.)
+  let freshCookie = "", freshCrumb = "";
   try {
     const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "follow" });
-    const freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
+    freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
     const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
       headers: { "User-Agent": UA, Cookie: freshCookie },
     });
-    const freshCrumb = (await crumbRes.text()).trim();
+    freshCrumb = (await crumbRes.text()).trim();
+  } catch (e) {
+    console.error("[fetchFundamentals] cookie/crumb error:", String(e));
+    return out;
+  }
+  const hdrs = { "User-Agent": UA, Cookie: freshCookie };
+
+  // Stage 1: v7/quote — market cap, PE ratios, EPS.
+  try {
     const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
-    const res = await fetch(url, { headers: { "User-Agent": UA, Cookie: freshCookie } });
+    const res = await fetch(url, { headers: hdrs });
     if (res.ok) {
       const q = (await res.json())?.quoteResponse?.result?.[0] ?? {};
       out.market_cap = numOrNull(q.marketCap);
@@ -212,27 +222,26 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
       if (trlEps != null && fwdEps != null && trlEps !== 0)
         out.growth_fwd = ((fwdEps - trlEps) / Math.abs(trlEps)) * 100;
     }
-  } catch (e) {
-    console.error("[fetchFundamentals] v7 error:", String(e));
-  }
-  // Stage 2: quoteSummary/financialData — margins, analyst ratings, revenue growth.
-  // Uses shared yfFetch (v10/quoteSummary works with shared crumb).
+  } catch (e) { console.error("[fetchFundamentals] v7 error:", String(e)); }
+
+  // Stage 2: v10/quoteSummary/financialData — margins, analyst ratings, revenue growth.
   try {
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData`;
-    const json = await yfFetch(url);
-    const fd = json?.quoteSummary?.result?.[0]?.financialData ?? {};
-    const rg = numOrNull(fd.revenueGrowth);
-    if (rg !== null) out.growth_yoy = rg * 100;
-    const gm = numOrNull(fd.grossMargins);
-    if (gm !== null) out.gross_margin = gm * 100;
-    const em = numOrNull(fd.ebitdaMargins);
-    if (em !== null) out.ebitda_margin = em * 100;
-    const rm = numOrNull(fd.recommendationMean);
-    if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
-    out.target_price = numOrNull(fd.targetMeanPrice);
-  } catch (e) {
-    console.error("[fetchFundamentals] quoteSummary error:", String(e));
-  }
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData&crumb=${encodeURIComponent(freshCrumb)}`;
+    const res = await fetch(url, { headers: hdrs });
+    if (res.ok) {
+      const fd = (await res.json())?.quoteSummary?.result?.[0]?.financialData ?? {};
+      const rg = numOrNull(fd.revenueGrowth);
+      if (rg !== null) out.growth_yoy = rg * 100;
+      const gm = numOrNull(fd.grossMargins);
+      if (gm !== null) out.gross_margin = gm * 100;
+      const em = numOrNull(fd.ebitdaMargins);
+      if (em !== null) out.ebitda_margin = em * 100;
+      const rm = numOrNull(fd.recommendationMean);
+      if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
+      out.target_price = numOrNull(fd.targetMeanPrice);
+    }
+  } catch (e) { console.error("[fetchFundamentals] quoteSummary error:", String(e)); }
+
   return out;
 }
 
