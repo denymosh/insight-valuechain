@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchDaily, fetchLiveQuote, fetchFundamentals } from "@/lib/yfinance";
+import { fetchDaily, fetchLiveQuote, fetchFundamentals, fetchIV } from "@/lib/yfinance";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -66,39 +66,10 @@ export async function GET() {
     results.fundamentals = { ok: false, error: String(e?.message || e) };
   }
 
-  // Debug: raw options response for IV
+  // Debug: test fetchIV directly
   try {
-    const { cookie, crumb } = await (async () => {
-      const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA2 }, redirect: "follow" });
-      const cookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
-      const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", { headers: { "User-Agent": UA2, Cookie: cookie } });
-      const crumb = (await crumbRes.text()).trim();
-      return { cookie, crumb };
-    })();
-    const optUrl = `https://query2.finance.yahoo.com/v7/finance/options/NVDA?crumb=${encodeURIComponent(crumb)}`;
-    const res = await fetch(optUrl, { headers: { "User-Agent": UA2, Cookie: cookie } });
-    const status = res.status;
-    if (!res.ok) {
-      results.iv_debug = { ok: false, status, body: await res.text().then(t => t.slice(0, 300)) };
-    } else {
-      const json = await res.json();
-      const result = json?.optionChain?.result?.[0];
-      const currentPrice = result?.quote?.regularMarketPrice;
-      const calls: any[] = result?.options?.[0]?.calls ?? [];
-      const puts: any[] = result?.options?.[0]?.puts ?? [];
-      const atmCall = calls.reduce((b: any, c: any) => !b || Math.abs(c.strike - currentPrice) < Math.abs(b.strike - currentPrice) ? c : b, null);
-      const atmPut = puts.reduce((b: any, p: any) => !b || Math.abs(p.strike - currentPrice) < Math.abs(b.strike - currentPrice) ? p : b, null);
-      results.iv_debug = {
-        ok: true, status,
-        currentPrice,
-        callsCount: calls.length,
-        putsCount: puts.length,
-        atmCallStrike: atmCall?.strike,
-        atmCallIV: atmCall?.impliedVolatility,
-        atmPutStrike: atmPut?.strike,
-        atmPutIV: atmPut?.impliedVolatility,
-      };
-    }
+    const iv = await fetchIV("NVDA");
+    results.iv_debug = { ok: iv != null, iv_raw: iv, iv_pct: iv != null ? +(iv * 100).toFixed(2) : null };
   } catch (e: any) {
     results.iv_debug = { ok: false, error: String(e?.message || e) };
   }

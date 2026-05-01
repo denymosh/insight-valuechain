@@ -288,8 +288,20 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
  *  Returns IV as a fraction (e.g. 0.45 = 45%).  Returns null on any error. */
 export async function fetchIV(symbol: string): Promise<number | null> {
   try {
-    const url = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
-    const json = await yfFetch(url);
+    // Fresh cookie/crumb — Yahoo options endpoint rejects the shared crumb on cloud IPs
+    const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "follow" });
+    const freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
+    const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": UA, Cookie: freshCookie },
+    });
+    const freshCrumb = (await crumbRes.text()).trim();
+    if (!freshCrumb) return null;
+
+    const url = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(freshCrumb)}`;
+    const res = await fetch(url, { headers: { "User-Agent": UA, Cookie: freshCookie } });
+    if (!res.ok) return null;
+    const json = await res.json();
+
     const result = json?.optionChain?.result?.[0];
     if (!result) return null;
 
@@ -301,19 +313,13 @@ export async function fetchIV(symbol: string): Promise<number | null> {
     if (!opts) return null;
 
     const calls: any[] = opts.calls ?? [];
-    const puts: any[] = opts.puts ?? [];
+    const puts: any[]  = opts.puts  ?? [];
 
     // Find ATM call and put (strike closest to current price)
-    const atmCall = calls.reduce((best: any, c: any) => {
-      if (!best || Math.abs((c.strike ?? 0) - currentPrice) < Math.abs((best.strike ?? 0) - currentPrice))
-        return c;
-      return best;
-    }, null);
-    const atmPut = puts.reduce((best: any, p: any) => {
-      if (!best || Math.abs((p.strike ?? 0) - currentPrice) < Math.abs((best.strike ?? 0) - currentPrice))
-        return p;
-      return best;
-    }, null);
+    const atmCall = calls.reduce((best: any, c: any) =>
+      !best || Math.abs((c.strike ?? 0) - currentPrice) < Math.abs((best.strike ?? 0) - currentPrice) ? c : best, null);
+    const atmPut = puts.reduce((best: any, p: any) =>
+      !best || Math.abs((p.strike ?? 0) - currentPrice) < Math.abs((best.strike ?? 0) - currentPrice) ? p : best, null);
 
     const callIV = numOrNull(atmCall?.impliedVolatility);
     const putIV  = numOrNull(atmPut?.impliedVolatility);
