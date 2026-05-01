@@ -9,6 +9,7 @@ import {
   fetchIntraday15m,
   fetchLiveQuote,
   fetchFundamentals,
+  fetchIV,
 } from "./yfinance";
 
 async function listSymbols(): Promise<string[]> {
@@ -97,11 +98,12 @@ export async function refreshDailyAll(): Promise<{ ok: number; fail: number }> {
 
 export async function refreshDailyOne(symbol: string): Promise<void> {
   symbol = symbol.toUpperCase();
-  const [daily, weekly, monthly, fund] = await Promise.all([
+  const [daily, weekly, monthly, fund, rawIV] = await Promise.all([
     fetchDaily(symbol),
     fetchWeekly(symbol),
     fetchMonthly(symbol),
     fetchFundamentals(symbol),  // includes next_earnings via calendarEvents
+    fetchIV(symbol),
   ]);
   const snap = computeSnapshot(daily, weekly, monthly);
   // Remove session_close — not a DB column, causes silent upsert failure in PostgREST
@@ -121,6 +123,27 @@ export async function refreshDailyOne(symbol: string): Promise<void> {
     patch.change = session_close - snap.prev_close;
     patch.change_pct = (patch.change / snap.prev_close) * 100;
   }
+
+  // ── IV: store today's reading and compute 1-year percentile ──
+  if (rawIV != null && rawIV > 0) {
+    const ivPct = rawIV * 100; // convert fraction → percentage, e.g. 0.45 → 45
+    const today = new Date().toISOString().slice(0, 10);
+    // Upsert today's IV into history table
+    await sb.from("iv_history").upsert({ symbol, date: today, iv: rawIV }, { onConflict: "symbol,date" });
+    // Fetch last 252 trading days of history for this symbol
+    const { data: hist } = await sb.from("iv_history")
+      .select("iv")
+      .eq("symbol", symbol)
+      .order("date", { ascending: false })
+      .limit(252);
+    patch.iv = ivPct;
+    if (hist && hist.length >= 5) {
+      const sorted = hist.map((r: any) => r.iv as number).sort((a, b) => a - b);
+      const rank = sorted.filter((v) => v <= rawIV).length;
+      patch.iv_pct = Math.round((rank / sorted.length) * 100);
+    }
+  }
+
   const { error } = await sb.from("quotes").upsert(patch, { onConflict: "symbol" });
   if (error) throw new Error(error.message);
 }

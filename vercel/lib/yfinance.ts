@@ -283,6 +283,47 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
 
 // fetchNextEarnings is now merged into fetchFundamentals (returns fund.next_earnings).
 
+// ─── IV (Implied Volatility) from options chain ───────────────────────────────
+/** Fetches the ATM implied volatility for the nearest expiry (front-month).
+ *  Returns IV as a fraction (e.g. 0.45 = 45%).  Returns null on any error. */
+export async function fetchIV(symbol: string): Promise<number | null> {
+  try {
+    const url = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(symbol)}`;
+    const json = await yfFetch(url);
+    const result = json?.optionChain?.result?.[0];
+    if (!result) return null;
+
+    const currentPrice: number | null = numOrNull(result.quote?.regularMarketPrice);
+    if (currentPrice == null || currentPrice <= 0) return null;
+
+    // Use the first (nearest) expiry options chain
+    const opts = result.options?.[0];
+    if (!opts) return null;
+
+    const calls: any[] = opts.calls ?? [];
+    const puts: any[] = opts.puts ?? [];
+
+    // Find ATM call and put (strike closest to current price)
+    const atmCall = calls.reduce((best: any, c: any) => {
+      if (!best || Math.abs((c.strike ?? 0) - currentPrice) < Math.abs((best.strike ?? 0) - currentPrice))
+        return c;
+      return best;
+    }, null);
+    const atmPut = puts.reduce((best: any, p: any) => {
+      if (!best || Math.abs((p.strike ?? 0) - currentPrice) < Math.abs((best.strike ?? 0) - currentPrice))
+        return p;
+      return best;
+    }, null);
+
+    const callIV = numOrNull(atmCall?.impliedVolatility);
+    const putIV  = numOrNull(atmPut?.impliedVolatility);
+    if (callIV != null && putIV != null) return (callIV + putIV) / 2;
+    return callIV ?? putIV;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function numOrNull(v: any): number | null {
   if (v == null) return null;
