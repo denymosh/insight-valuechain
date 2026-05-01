@@ -74,5 +74,32 @@ export async function GET() {
     results.iv_debug = { ok: false, error: String(e?.message || e) };
   }
 
+  // Debug: Barchart core-api — returns ivPercentile + ivRank directly
+  try {
+    const bcUrl = "https://www.barchart.com/proxies/core-api/v1/quotes/get?symbols=NVDA&fields=impliedVolatility,ivPercentile,ivRank,historicalVolatility&raw=1";
+    const bcRes = await fetch(bcUrl, {
+      headers: {
+        "User-Agent": UA2,
+        "Referer": "https://www.barchart.com/stocks/quotes/NVDA/options",
+        "Accept": "application/json",
+      },
+    });
+    if (!bcRes.ok) {
+      results.barchart_debug = { ok: false, status: bcRes.status, body: await bcRes.text().then(t => t.slice(0, 200)) };
+    } else {
+      const bcJson = await bcRes.json();
+      const d = bcJson?.data?.[0]?.raw ?? bcJson?.data?.[0] ?? {};
+      results.barchart_debug = {
+        ok: true,
+        impliedVolatility: d.impliedVolatility,
+        ivPercentile: d.ivPercentile,
+        ivRank: d.ivRank,
+        historicalVolatility: d.historicalVolatility,
+      };
+    }
+  } catch (e: any) {
+    results.barchart_debug = { ok: false, error: String(e?.message || e) };
+  }
+
   return NextResponse.json(results);
 }
