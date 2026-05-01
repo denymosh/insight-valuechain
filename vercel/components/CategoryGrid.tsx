@@ -209,14 +209,14 @@ const SparklineCell = (p: any) => {
 };
 
 // IV percentile badge — blue (low) → green → yellow → orange → red (high)
-// IV / Rank cell — top: rank badge (color-coded), bottom: raw IV value
-// Rank accuracy improves as iv_history accumulates (meaningful after ~30 days)
+// IV / Rank cell — top: IV Rank badge (大), bottom: IV value (小)
 const IvPctCell = (p: any) => {
-  const ivp = p.value;           // iv_pct / rank (0–100), or null
-  const iv  = p.data?.quote?.iv; // current IV as %, e.g. 45.2
-  // If no rank yet but we have raw IV, show IV only
-  if (ivp == null && iv == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
-  if (ivp == null) {
+  const rank = p.value;                  // iv_rank (0–100), 主显示
+  const iv   = p.data?.quote?.iv;        // 当前 IV (%)
+  const pct  = p.data?.quote?.iv_pct;    // IV Percentile (tooltip 用)
+  if (rank == null && iv == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  // 没 rank 但有 iv — 只显示 iv
+  if (rank == null) {
     return (
       <div style={cellCenter}>
         <div style={{ textAlign: "center", lineHeight: 1.2 }}>
@@ -226,28 +226,33 @@ const IvPctCell = (p: any) => {
       </div>
     );
   }
+  // 颜色按 IV Rank 分级（蓝→绿→黄→橙→红）
   let fg = "#93c5fd", bg = "rgba(96,165,250,0.12)", bd = "rgba(96,165,250,0.38)";
-  if      (ivp >= 80) { fg = "#fca5a5"; bg = "rgba(239,68,68,0.16)";  bd = "rgba(239,68,68,0.45)"; }
-  else if (ivp >= 60) { fg = "#fdba74"; bg = "rgba(251,146,60,0.14)"; bd = "rgba(251,146,60,0.40)"; }
-  else if (ivp >= 40) { fg = "#fde68a"; bg = "rgba(250,204,21,0.12)"; bd = "rgba(250,204,21,0.38)"; }
-  else if (ivp >= 20) { fg = "#86efac"; bg = "rgba(34,197,94,0.10)";  bd = "rgba(34,197,94,0.30)"; }
+  if      (rank >= 80) { fg = "#fca5a5"; bg = "rgba(239,68,68,0.16)";  bd = "rgba(239,68,68,0.45)"; }
+  else if (rank >= 60) { fg = "#fdba74"; bg = "rgba(251,146,60,0.14)"; bd = "rgba(251,146,60,0.40)"; }
+  else if (rank >= 40) { fg = "#fde68a"; bg = "rgba(250,204,21,0.12)"; bd = "rgba(250,204,21,0.38)"; }
+  else if (rank >= 20) { fg = "#86efac"; bg = "rgba(34,197,94,0.10)";  bd = "rgba(34,197,94,0.30)"; }
+  const tip = `IV Rank: ${num(rank, 0)}（52 周内当前 IV 排名）` +
+              (pct != null ? `\nIV Percentile: ${num(pct, 0)}%` : "") +
+              (iv  != null ? `\n当前 IV: ${num(iv, 1)}%` : "");
   return (
     <div style={cellCenter}>
       <div style={{ textAlign: "center", lineHeight: 1.2 }}>
         <span
           style={{
             display: "inline-block",
-            fontSize: 14, fontWeight: 700, color: fg,
+            fontSize: 16, fontWeight: 800, color: fg,
             background: bg, border: `1px solid ${bd}`,
-            padding: "2px 8px", borderRadius: 5,
+            padding: "3px 10px", borderRadius: 6,
             fontVariantNumeric: "tabular-nums",
+            letterSpacing: "-0.01em",
           }}
-          title={`IV Rank: ${num(ivp, 0)}%（历史百分位，数据积累越多越准）${iv != null ? `\n当前IV: ${num(iv, 1)}%` : ""}`}
+          title={tip}
         >
-          {num(ivp, 0)}%
+          {num(rank, 0)}
         </span>
         {iv != null && (
-          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+          <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>
             IV {num(iv, 1)}%
           </div>
         )}
@@ -663,8 +668,8 @@ export default function CategoryGrid({
         valueGetter: (p) => p.data?.quote?.last ?? p.data?.quote?.prev_close ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "涨跌", colId: "chg", width: 98, cellRenderer: ChangeStackedCell,
         valueGetter: (p) => p.data?.quote?.change_pct ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "IV/Rank", colId: "ivp", width: 78, cellRenderer: IvPctCell,
-        valueGetter: (p) => p.data?.quote?.iv_pct ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
+      { headerName: "IV Rank", colId: "ivp", width: 82, cellRenderer: IvPctCell,
+        valueGetter: (p) => p.data?.quote?.iv_rank ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "走势", colId: "spark", width: 100, cellRenderer: SparklineCell, headerClass: "ag-center-header" },
       { headerName: "5D%", colId: "ret5d", width: 75, cellRenderer: PctCell,
         valueGetter: (p) => p.data?.quote?.return_5d ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
