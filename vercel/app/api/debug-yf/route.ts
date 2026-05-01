@@ -62,6 +62,14 @@ export async function GET() {
     results.fundamentals_parsed = { error: String(e?.message || e) };
   }
 
+  // Call fetchFundamentals directly
+  try {
+    const f = await fetchFundamentals("NVDA");
+    results.fetchFundamentals = { ok: f.market_cap != null, market_cap: f.market_cap, pe_fwd: f.pe_fwd };
+  } catch (e: any) {
+    results.fetchFundamentals = { ok: false, error: String(e?.message || e) };
+  }
+
   // Directly replicate fetchFundamentals logic with full error exposure
   try {
     const UA2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
