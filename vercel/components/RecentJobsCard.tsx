@@ -110,7 +110,6 @@ function SummaryCard({ s }: { s: JobSummary }) {
       border: "1px solid rgba(51,65,85,0.5)",
       borderRadius: 8,
       padding: "14px 18px",
-      marginBottom: 14,
     }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
@@ -153,6 +152,7 @@ function Section({ title, color, lines }: { title: string; color: string; lines:
 export default function RecentJobsCard() {
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeSym, setActiveSym] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,28 +160,65 @@ export default function RecentJobsCard() {
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
-        setSummaries(d.summaries ?? []);
+        // 只保留 30 天内有新招聘的标的
+        const active: JobSummary[] = (d.summaries ?? []).filter(
+          (s: JobSummary) => (s.posted_30d ?? 0) > 0
+        );
+        setSummaries(active);
+        if (active.length > 0) setActiveSym(active[0].symbol);
         setLoading(false);
       })
       .catch(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, []);
 
+  const current = summaries.find((s) => s.symbol === activeSym) ?? null;
+
   return (
     <div style={{
       marginTop: 24, marginBottom: 32,
-      padding: "16px 20px",
+      padding: "14px 18px",
       background: "rgba(15,23,42,0.3)",
       border: "1px solid rgba(51,65,85,0.4)",
       borderRadius: 10,
+      maxWidth: 1100,             // ← 收窄
     }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>
-          📋 招聘动态分析
-        </h3>
-        <span style={{ fontSize: 11, color: "#64748b" }}>
-          基于公开招聘数据，每日刷新
-        </span>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 12, marginBottom: 12, flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>
+            📋 招聘动态分析
+          </h3>
+          <span style={{ fontSize: 11, color: "#64748b" }}>
+            近 30 天内有招聘活动的标的
+          </span>
+        </div>
+        {summaries.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {summaries.map((s) => {
+              const active = s.symbol === activeSym;
+              return (
+                <button
+                  key={s.symbol}
+                  onClick={() => setActiveSym(s.symbol)}
+                  style={{
+                    fontSize: 11, fontWeight: 700,
+                    padding: "4px 10px",
+                    borderRadius: 5,
+                    border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
+                    background: active ? "rgba(96,165,250,0.18)" : "transparent",
+                    color: active ? "#93c5fd" : "#94a3b8",
+                    cursor: "pointer",
+                  }}
+                >
+                  {s.symbol} <span style={{ opacity: 0.65, fontWeight: 500 }}>+{s.posted_30d}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -190,9 +227,9 @@ export default function RecentJobsCard() {
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>
           暂无数据，请运行 /api/cron/refresh-jobs 触发首次抓取。
         </div>
-      ) : (
-        summaries.map((s) => <SummaryCard key={s.symbol} s={s} />)
-      )}
+      ) : current ? (
+        <SummaryCard s={current} />
+      ) : null}
     </div>
   );
 }
