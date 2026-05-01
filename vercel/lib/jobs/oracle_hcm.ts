@@ -37,18 +37,18 @@ export async function fetchOracleHcmJobs(
 ): Promise<JobPosting[]> {
   const out: JobPosting[] = [];
   const lang = cfg.langPath ?? "en";
-  const PAGE = 200;
+  // Oracle HCM 通常忽略 limit 参数，每页固定返回 25 条
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;
+  const MAX_ITERATIONS = 100; // 安全上限：100 * 25 = 2500 条
 
-  while (offset < total) {
-    // expand=requisitionList 才会返回逐条 job；limit/offset 顶层；不指定 sortBy
+  for (let iter = 0; iter < MAX_ITERATIONS && offset < total; iter++) {
     const url =
       `https://${cfg.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
       `?onlyData=true&expand=requisitionList.secondaryLocations` +
       `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)}` +
       `,facetsList=LOCATIONS%3BTITLES%3BCATEGORIES%3BORGANIZATIONS%3BPOSTING_DATES` +
-      `&limit=${PAGE}&offset=${offset}`;
+      `&offset=${offset}`;
 
     const res = await fetch(url, {
       headers: { "User-Agent": UA, Accept: "application/json" },
@@ -88,7 +88,8 @@ export async function fetchOracleHcmJobs(
     }
 
     offset += items.length;
-    if (items.length < PAGE) break;
+    // 早停优化：30 天内的 job 已足够，向用户展示后无意义继续翻页
+    // （但 cron 全量需要更彻底，所以 cron 里靠 total 判断）
   }
 
   return out;
