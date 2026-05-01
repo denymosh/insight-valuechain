@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import CategoryPanel from "@/components/CategoryPanel";
+import RecentJobsCard from "@/components/RecentJobsCard";
 import { jget, jpost, jpatch, jdel } from "@/lib/api";
 import type { Quote } from "@/lib/quote";
 import {
@@ -424,6 +425,9 @@ export default function Page() {
                 👋 开始：点右上角 "+ 一级赛道" → 创建赛道 → 在赛道下创建二级分类 → 在分类面板中添加标的
               </div>
             )}
+
+            {/* 主表格下方的招聘动态卡片 */}
+            <RecentJobsCard />
           </div>
         </div>
       </div>
