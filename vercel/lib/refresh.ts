@@ -73,18 +73,20 @@ export async function refreshPriceOne(symbol: string): Promise<void> {
 }
 
 /** Daily / slow loop: full bars → indicators, fundamentals, earnings. Run once/day. */
+/** Daily full refresh: bars + indicators + fundamentals + earnings.
+ *  Runs in batches of 3 in parallel to fit inside 60s cron timeout. */
 export async function refreshDailyAll(): Promise<{ ok: number; fail: number }> {
   const syms = await listSymbols();
   let ok = 0, fail = 0;
-  for (const symbol of syms) {
-    try {
-      await refreshDailyOne(symbol);
-      ok++;
-    } catch (e) {
-      console.warn("refreshDaily", symbol, e);
-      fail++;
+  const BATCH = 3;
+  for (let i = 0; i < syms.length; i += BATCH) {
+    const batch = syms.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map(refreshDailyOne));
+    for (const r of results) {
+      if (r.status === "fulfilled") ok++;
+      else { fail++; console.warn("refreshDaily batch error", r.reason); }
     }
-    await sleep(600);
+    if (i + BATCH < syms.length) await sleep(500);
   }
   return { ok, fail };
 }
