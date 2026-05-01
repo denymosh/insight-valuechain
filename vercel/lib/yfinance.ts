@@ -185,55 +185,53 @@ const WS_LABELS: Record<number, string> = {
   1: "Strong Buy", 2: "Buy", 3: "Hold", 4: "Sell", 5: "Strong Sell",
 };
 
-// Debug capture for last fetchFundamentals call (read by debug-yf route)
-let _fundDebug: any = null;
-export function getFundDebug() { return _fundDebug; }
-
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const out: Fundamentals = {
     market_cap: null, pe_ttm: null, pe_fwd: null, ps_ttm: null,
     growth_yoy: null, growth_fwd: null, gross_margin: null,
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
   };
+  // Stage 1: v7/quote — market metrics. Needs its own fresh cookie/crumb (v7 rejects shared crumb).
   try {
-    // v7/quote requires its own independent cookie/crumb session (separate from v8/chart).
     const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "follow" });
     const freshCookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
     const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
       headers: { "User-Agent": UA, Cookie: freshCookie },
     });
     const freshCrumb = (await crumbRes.text()).trim();
-    _fundDebug = { cookie_len: freshCookie.length, crumb_len: freshCrumb.length, crumb: freshCrumb };
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,revenueGrowth,grossMargins,ebitdaMargins,recommendationMean,targetMeanPrice,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}&fields=marketCap,trailingPE,forwardPE,priceToSalesTrailing12Months,trailingEps,forwardEps&crumb=${encodeURIComponent(freshCrumb)}`;
     const res = await fetch(url, { headers: { "User-Agent": UA, Cookie: freshCookie } });
-    _fundDebug.http_status = res.status;
-    const body = await res.text();
-    _fundDebug.raw = body.slice(0, 300);
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
-    const json = JSON.parse(body);
-    const q = json?.quoteResponse?.result?.[0] ?? {};
-    _fundDebug.result_keys = Object.keys(q).length;
-    _fundDebug.market_cap = q.marketCap;
-    out.market_cap = numOrNull(q.marketCap);
-    out.pe_ttm = numOrNull(q.trailingPE);
-    out.pe_fwd = numOrNull(q.forwardPE);
-    out.ps_ttm = numOrNull(q.priceToSalesTrailing12Months);
-    const rg = numOrNull(q.revenueGrowth);
-    if (rg !== null) out.growth_yoy = rg * 100;
-    const trlEps = numOrNull(q.trailingEps);
-    const fwdEps = numOrNull(q.forwardEps);
-    if (trlEps != null && fwdEps != null && trlEps !== 0)
-      out.growth_fwd = ((fwdEps - trlEps) / Math.abs(trlEps)) * 100;
-    const gm = numOrNull(q.grossMargins);
-    if (gm !== null) out.gross_margin = gm * 100;
-    const em = numOrNull(q.ebitdaMargins);
-    if (em !== null) out.ebitda_margin = em * 100;
-    const rm = numOrNull(q.recommendationMean);
-    if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
-    out.target_price = numOrNull(q.targetMeanPrice);
+    if (res.ok) {
+      const q = (await res.json())?.quoteResponse?.result?.[0] ?? {};
+      out.market_cap = numOrNull(q.marketCap);
+      out.pe_ttm = numOrNull(q.trailingPE);
+      out.pe_fwd = numOrNull(q.forwardPE);
+      out.ps_ttm = numOrNull(q.priceToSalesTrailing12Months);
+      const trlEps = numOrNull(q.trailingEps);
+      const fwdEps = numOrNull(q.forwardEps);
+      if (trlEps != null && fwdEps != null && trlEps !== 0)
+        out.growth_fwd = ((fwdEps - trlEps) / Math.abs(trlEps)) * 100;
+    }
   } catch (e) {
-    if (_fundDebug) _fundDebug.error = String(e);
-    console.error("[fetchFundamentals] error:", String(e));
+    console.error("[fetchFundamentals] v7 error:", String(e));
+  }
+  // Stage 2: quoteSummary/financialData — margins, analyst ratings, revenue growth.
+  // Uses shared yfFetch (v10/quoteSummary works with shared crumb).
+  try {
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData`;
+    const json = await yfFetch(url);
+    const fd = json?.quoteSummary?.result?.[0]?.financialData ?? {};
+    const rg = numOrNull(fd.revenueGrowth);
+    if (rg !== null) out.growth_yoy = rg * 100;
+    const gm = numOrNull(fd.grossMargins);
+    if (gm !== null) out.gross_margin = gm * 100;
+    const em = numOrNull(fd.ebitdaMargins);
+    if (em !== null) out.ebitda_margin = em * 100;
+    const rm = numOrNull(fd.recommendationMean);
+    if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
+    out.target_price = numOrNull(fd.targetMeanPrice);
+  } catch (e) {
+    console.error("[fetchFundamentals] quoteSummary error:", String(e));
   }
   return out;
 }
