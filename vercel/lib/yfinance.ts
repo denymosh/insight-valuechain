@@ -167,6 +167,8 @@ export async function fetchLiveQuote(
 }
 
 // ─── Fundamentals ────────────────────────────────────────────────────────────
+export type EarningsInfo = { date: string; time: "bmo" | "amc" | "unknown"; days: number };
+
 export type Fundamentals = {
   market_cap: number | null;
   pe_ttm: number | null;
@@ -179,6 +181,7 @@ export type Fundamentals = {
   ws_rating: number | null;
   ws_rating_label: string | null;
   target_price: number | null;
+  next_earnings: EarningsInfo | null;
 };
 
 const WS_LABELS: Record<number, string> = {
@@ -190,6 +193,7 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     market_cap: null, pe_ttm: null, pe_fwd: null, ps_ttm: null,
     growth_yoy: null, growth_fwd: null, gross_margin: null,
     ebitda_margin: null, ws_rating: null, ws_rating_label: null, target_price: null,
+    next_earnings: null,
   };
   // Fetch fresh cookie/crumb once — used for both v7/quote and v10/quoteSummary.
   // (Yahoo v7 rejects the shared crumb from ensureCrumb, so we always fetch fresh.)
@@ -225,9 +229,10 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     }
   } catch (e) { console.error("[fetchFundamentals] v7 error:", String(e)); }
 
-  // Stage 2: v10/quoteSummary/financialData — margins, analyst ratings, revenue growth.
+  // Stage 2: v10/quoteSummary — margins, analyst ratings, revenue growth, earnings date.
+  // Combines financialData + summaryDetail + calendarEvents in one call.
   try {
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,summaryDetail&crumb=${encodeURIComponent(freshCrumb)}`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=financialData,summaryDetail,calendarEvents&crumb=${encodeURIComponent(freshCrumb)}`;
     const res = await fetch(url, { headers: hdrs });
     if (res.ok) {
       const r0 = (await res.json())?.quoteSummary?.result?.[0] ?? {};
@@ -243,37 +248,31 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
       if (rm !== null) { out.ws_rating = rm; out.ws_rating_label = WS_LABELS[Math.round(rm)] ?? null; }
       out.target_price = numOrNull(fd.targetMeanPrice);
       out.ps_ttm = numOrNull(sd.priceToSalesTrailing12Months);
+      // Parse next earnings date from calendarEvents
+      const dates: any[] = r0.calendarEvents?.earnings?.earningsDate ?? [];
+      if (dates.length) {
+        const now = new Date();
+        const cutoff = new Date(Date.now() + 45 * DAY);
+        let next: Date | null = null;
+        for (const d of dates) {
+          const dt = new Date(typeof d === "object" && "raw" in d ? d.raw * 1000 : d);
+          if (dt > now && dt <= cutoff) { if (!next || dt < next) next = dt; }
+        }
+        if (next) {
+          const days = Math.round((next.getTime() - now.getTime()) / DAY);
+          const etHour = etHourOf(next);
+          const time: "bmo" | "amc" | "unknown" =
+            etHour >= 5 && etHour < 9 ? "bmo" : etHour >= 16 ? "amc" : "unknown";
+          out.next_earnings = { date: next.toISOString().slice(0, 10), time, days };
+        }
+      }
     }
   } catch (e) { console.error("[fetchFundamentals] quoteSummary error:", String(e)); }
 
   return out;
 }
 
-// ─── Next earnings ───────────────────────────────────────────────────────────
-export async function fetchNextEarnings(
-  symbol: string
-): Promise<{ date: string; time: "bmo" | "amc" | "unknown"; days: number } | null> {
-  try {
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=calendarEvents`;
-    const json = await yfFetch(url);
-    const ce = json?.quoteSummary?.result?.[0]?.calendarEvents ?? {};
-    const dates: any[] = ce.earnings?.earningsDate ?? [];
-    if (!dates.length) return null;
-    const now = new Date();
-    const cutoff = new Date(Date.now() + 45 * DAY);
-    let next: Date | null = null;
-    for (const d of dates) {
-      const dt = new Date(typeof d === "object" && "raw" in d ? d.raw * 1000 : d);
-      if (dt > now && dt <= cutoff) { if (!next || dt < next) next = dt; }
-    }
-    if (!next) return null;
-    const days = Math.round((next.getTime() - now.getTime()) / DAY);
-    const etHour = etHourOf(next);
-    const time: "bmo" | "amc" | "unknown" =
-      etHour >= 5 && etHour < 9 ? "bmo" : etHour >= 16 ? "amc" : "unknown";
-    return { date: next.toISOString().slice(0, 10), time, days };
-  } catch { return null; }
-}
+// fetchNextEarnings is now merged into fetchFundamentals (returns fund.next_earnings).
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function numOrNull(v: any): number | null {

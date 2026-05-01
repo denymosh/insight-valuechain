@@ -9,7 +9,6 @@ import {
   fetchIntraday15m,
   fetchLiveQuote,
   fetchFundamentals,
-  fetchNextEarnings,
 } from "./yfinance";
 
 async function listSymbols(): Promise<string[]> {
@@ -93,23 +92,23 @@ export async function refreshDailyAll(): Promise<{ ok: number; fail: number }> {
 
 export async function refreshDailyOne(symbol: string): Promise<void> {
   symbol = symbol.toUpperCase();
-  const [daily, weekly, monthly, fund, earn] = await Promise.all([
+  const [daily, weekly, monthly, fund] = await Promise.all([
     fetchDaily(symbol),
     fetchWeekly(symbol),
     fetchMonthly(symbol),
-    fetchFundamentals(symbol),
-    fetchNextEarnings(symbol),
+    fetchFundamentals(symbol),  // includes next_earnings via calendarEvents
   ]);
   const snap = computeSnapshot(daily, weekly, monthly);
   // Remove session_close — not a DB column, causes silent upsert failure in PostgREST
   const { session_close, ...snapFields } = snap as any;
+  const { next_earnings, ...fundFields } = fund;
   const patch: any = {
     symbol,
     source: "yfinance",
     updated_at: new Date().toISOString(),
     ...snapFields,
-    ...fund,
-    next_earnings: earn,
+    ...fundFields,
+    next_earnings,
   };
   // Map session_close -> last and compute change
   if (session_close != null && snap.prev_close != null && snap.prev_close !== 0) {
