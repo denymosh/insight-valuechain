@@ -4,6 +4,8 @@ import { fetchDaily, fetchLiveQuote, fetchFundamentals, fetchIV } from "@/lib/yf
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+const UA2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 export async function GET() {
   const results: any = {};
 
@@ -17,7 +19,6 @@ export async function GET() {
   // Debug: raw meta fields from Yahoo
   try {
     const { default: _unused } = await import("@/lib/yfinance") as any;
-    const UA2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
     const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA2 }, redirect: "follow" });
     const cookie = (cookieRes.headers.get("set-cookie") ?? "").split(";")[0];
     const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", { headers: { "User-Agent": UA2, Cookie: cookie } });
