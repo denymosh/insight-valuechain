@@ -35,20 +35,38 @@ function timeAgo(iso: string): string {
   return `${d} 天前`;
 }
 
+/** Sum counts in a name→count map whose name matches the regex. */
+function aggMatch(map: Record<string, number>, regex: RegExp): number {
+  let total = 0;
+  for (const [name, cnt] of Object.entries(map)) {
+    if (regex.test(name)) total += cnt;
+  }
+  return total;
+}
+
 /** Generates positive signals + cautions based on hiring data. */
 function analyze(s: JobSummary): { positive: string[]; caution: string[] } {
   const positive: string[] = [];
   const caution: string[] = [];
 
-  const rdCount  = s.by_dept["Applied R&D"] ?? s.by_dept["R&D"] ?? 0;
-  const rdPct    = pct(rdCount, s.total);
-  const swCount  = s.by_title["Software"] ?? 0;
-  const hwCount  = s.by_title["Digital Hardware"] ?? s.by_title["Hardware"] ?? 0;
-  const techCount = swCount + hwCount;
-  const traineeCount = s.by_title["Trainee"] ?? 0;
-  const traineePct = pct(traineeCount, s.total);
+  // ── 招聘类型分析 (workerSubType) ──
+  // 雇佣类型分为三类：正式 / 实习 / 合同
+  const regularCount  = aggMatch(s.by_title, /^regular$/i);
+  const internCount   = aggMatch(s.by_title, /intern|trainee|student|co-op/i);
+  const contractCount = aggMatch(s.by_title, /contract|contingent|fixed[\s-]?term/i);
+  const regularPct    = pct(regularCount,  s.total);
+  const internPct     = pct(internCount,   s.total);
+  const contractPct   = pct(contractCount, s.total);
 
-  // Low-cost region concentration
+  // ── 部门聚合：研发 / 制造 / 销售 ──
+  const rdCount  = aggMatch(s.by_dept, /r&?d|research|engineer|design|hardware|software|silicon|verification|test|product develop/i);
+  const mfgCount = aggMatch(s.by_dept, /manufactur|production|prodrelated|process develop|equipment|maintenance|fab/i);
+  const salesCount = aggMatch(s.by_dept, /sales|marketing|business develop|commercial/i);
+  const rdPct    = pct(rdCount,    s.total);
+  const mfgPct   = pct(mfgCount,   s.total);
+  const salesPct = pct(salesCount, s.total);
+
+  // ── 低成本地区集中度 ──
   let lowCostCount = 0;
   for (const c of LOW_COST_COUNTRIES) lowCostCount += s.by_country[c] ?? 0;
   const lowCostPct = pct(lowCostCount, s.total);
@@ -56,15 +74,21 @@ function analyze(s: JobSummary): { positive: string[]; caution: string[] } {
     .filter((c) => (s.by_country[c] ?? 0) > 0)
     .slice(0, 3);
 
-  const post7Pct = pct(s.posted_7d, s.total);
+  const post7Pct  = pct(s.posted_7d,  s.total);
   const post30Pct = pct(s.posted_30d, s.total);
 
-  // ── Positive signals ─────
-  if (rdPct >= 30) {
-    positive.push(`R&D 投入大 (${rdCount} 个 / ${rdPct}%)`);
+  // ── 正面信号 ──
+  if (rdPct >= 40) {
+    positive.push(`R&D / 工程岗 ${rdCount} 个 (${rdPct}% — 强研发投入)`);
   }
-  if (techCount >= 100) {
-    positive.push(`技术核心岗 ${techCount} 个 (软件 ${swCount} + 硬件 ${hwCount})`);
+  if (mfgPct >= 30) {
+    positive.push(`制造 / 工艺岗 ${mfgCount} 个 (${mfgPct}% — 产能扩张)`);
+  }
+  if (regularPct >= 90 && s.total >= 100) {
+    positive.push(`正式岗占比 ${regularPct}% — 雇佣结构稳健`);
+  }
+  if (internPct >= 5 && internPct < 15 && s.total >= 100) {
+    positive.push(`实习生 ${internCount} 个 (${internPct}% — 健康培养梯队)`);
   }
   if (post7Pct >= 15) {
     positive.push(`7 天新增 ${s.posted_7d} 个 (${post7Pct}% — 招聘加速)`);
@@ -73,16 +97,25 @@ function analyze(s: JobSummary): { positive: string[]; caution: string[] } {
     positive.push(`30 天新增 ${s.posted_30d} 个 (${post30Pct}% — 持续扩张)`);
   }
 
-  // ── Caution signals ──────
-  if (traineePct >= 15) {
-    caution.push(`Trainee ${traineeCount} 个 (${traineePct}% — 大量低薪新人)`);
+  // ── 需要注意 ──
+  if (internPct >= 20) {
+    caution.push(`实习生 ${internCount} 个 (${internPct}% — 偏成本控制)`);
+  }
+  if (contractPct >= 10) {
+    caution.push(`合同工/外包 ${contractCount} 个 (${contractPct}% — 用工弹性化)`);
   }
   if (lowCostPct >= 35) {
-    const places = lowCostNames.length ? `${lowCostNames.join(" + ")}` : "低成本地区";
-    caution.push(`${places} ${lowCostCount} 个 (${lowCostPct}% — 成本优化导向)`);
+    const places = lowCostNames.length ? lowCostNames.join(" + ") : "低成本地区";
+    caution.push(`${places} ${lowCostCount} 个 (${lowCostPct}% — 成本导向)`);
   }
-  if (post7Pct < 5 && s.total > 100) {
-    caution.push(`7 天仅新增 ${s.posted_7d} 个 (${post7Pct}% — 招聘放缓)`);
+  if (s.total >= 200 && salesPct > 0 && salesPct < 3) {
+    caution.push(`销售/营销岗仅 ${salesPct}% — 商业化拓展可能放缓`);
+  }
+  if (post7Pct < 3 && post30Pct < 10 && s.total >= 100 && (s.posted_7d > 0 || s.posted_30d > 0)) {
+    caution.push(`30 天新增 ${s.posted_30d} 个 (${post30Pct}% — 招聘放缓)`);
+  }
+  if (s.total < 50 && s.total > 0) {
+    caution.push(`总职位仅 ${s.total} 个 — 业务体量收缩信号`);
   }
 
   return { positive, caution };

@@ -73,14 +73,20 @@ export async function fetchWorkdaySummary(
   let by_title: Record<string, number> = {};
   for (const f of facets) {
     const param = String(f.facetParameter ?? "");
-    if (/jobFamilyGroup|jobFamily|category/i.test(param)) {
+    // 部门/职能分类：jobFamilyGroup (大类) > jobFamily (细类) > Functional_Area (BB)
+    if (/jobFamilyGroup|Functional_?Area|category/i.test(param)) {
       by_dept = { ...by_dept, ...facetToMap(f.values) };
-    } else if (/locationCountry|country/i.test(param)) {
+    } else if (/jobFamily/i.test(param) && Object.keys(by_dept).length === 0) {
+      // 仅当没有 jobFamilyGroup 时用 jobFamily（LITE 这种）
+      by_dept = facetToMap(f.values);
+    } else if (/^Country$/i.test(param)) {
       by_country = facetToMap(f.values);
-    } else if (/location(?!Country)/i.test(param) && Object.keys(by_country).length === 0) {
-      // Fallback when country facet not present
+    } else if (/locationCountry/i.test(param) && Object.keys(by_country).length === 0) {
+      by_country = facetToMap(f.values);
+    } else if (/^Location$/i.test(param) && Object.keys(by_country).length === 0) {
       by_country = facetToMap(f.values);
     } else if (/timeType|workerSubType/i.test(param)) {
+      // 这两个聚合到 by_title (workerSubType 提供 Regular/Intern/Contractor 信息)
       by_title = { ...by_title, ...facetToMap(f.values) };
     }
   }
