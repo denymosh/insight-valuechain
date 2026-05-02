@@ -228,6 +228,52 @@ function SummaryCard({ s }: { s: JobSummary }) {
   );
 }
 
+function Pill({ name, count }: { name: string; count: number }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "baseline", gap: 5,
+      fontSize: 11,
+      padding: "2px 8px",
+      borderRadius: 4,
+      background: "rgba(51,65,85,0.35)",
+      border: "1px solid rgba(71,85,105,0.4)",
+      color: "#cbd5e1",
+      whiteSpace: "nowrap",
+    }}>
+      <span>{name}</span>
+      <span style={{ color: "#94a3b8", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{count}</span>
+    </span>
+  );
+}
+
+function BucketRow({
+  label, total, totalPct, entries,
+}: {
+  label: string; total: number; totalPct: number; entries: [string, number][];
+}) {
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "180px 1fr",
+      gap: 12,
+      padding: "6px 0",
+      alignItems: "baseline",
+      borderTop: "1px solid rgba(51,65,85,0.25)",
+    }}>
+      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>
+        <div style={{ fontWeight: 700, color: "#cbd5e1" }}>{label}</div>
+        <div style={{ color: "#64748b", marginTop: 1 }}>
+          小计 <span style={{ color: "#cbd5e1", fontWeight: 600 }}>{total}</span>
+          <span style={{ marginLeft: 4 }}>({totalPct}%)</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+        {entries.map(([n, c]) => <Pill key={n} name={n} count={c} />)}
+      </div>
+    </div>
+  );
+}
+
 function DeptBreakdown({ s }: { s: JobSummary }) {
   const groups = groupDepts(s.by_dept);
   if (groups.length === 0) return null;
@@ -237,6 +283,11 @@ function DeptBreakdown({ s }: { s: JobSummary }) {
   const internCount   = aggMatch(s.by_title, /intern|trainee|student|co-op/i);
   const contractCount = aggMatch(s.by_title, /contract|contingent|fixed[\s-]?term/i);
   const fullTimeCount = aggMatch(s.by_title, /^full[\s-]?time$/i);
+  const empEntries: [string, number][] = [];
+  if (regularCount  > 0) empEntries.push([`正式岗 ${pct(regularCount,  s.total)}%`,  regularCount]);
+  if (internCount   > 0) empEntries.push([`实习/学生 ${pct(internCount, s.total)}%`,  internCount]);
+  if (contractCount > 0) empEntries.push([`合同/外包 ${pct(contractCount, s.total)}%`, contractCount]);
+  if (fullTimeCount > 0 && regularCount === 0) empEntries.push([`全职`, fullTimeCount]);
 
   return (
     <div style={{
@@ -244,72 +295,26 @@ function DeptBreakdown({ s }: { s: JobSummary }) {
       paddingTop: 12,
       borderTop: "1px dashed rgba(51,65,85,0.5)",
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1", marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1", marginBottom: 4 }}>
         📋 详细职位分布
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 18px" }}>
-        {groups.map((g) => {
-          const pctV = pct(g.total, s.total);
-          return (
-            <div key={g.bucket} style={{ fontSize: 11, lineHeight: 1.55, color: "#cbd5e1" }}>
-              <div style={{ fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>
-                {BUCKET_LABELS[g.bucket]}
-                <span style={{ marginLeft: 8, color: "#64748b", fontWeight: 500 }}>
-                  小计 {g.total} ({pctV}%)
-                </span>
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 14, color: "#94a3b8" }}>
-                {g.entries.slice(0, 8).map(([n, c]) => (
-                  <li key={n}>
-                    <span style={{ color: "#cbd5e1" }}>{n}</span>
-                    <span style={{ color: "#64748b", marginLeft: 6 }}>{c}</span>
-                  </li>
-                ))}
-                {g.entries.length > 8 && (
-                  <li style={{ color: "#64748b", listStyle: "none", paddingLeft: 0 }}>
-                    +{g.entries.length - 8} 项
-                  </li>
-                )}
-              </ul>
-            </div>
-          );
-        })}
-
-        {/* 雇佣类型 — 只在有数据时显示 */}
-        {(regularCount + internCount + contractCount + fullTimeCount) > 0 && (
-          <div style={{ fontSize: 11, lineHeight: 1.55, color: "#cbd5e1" }}>
-            <div style={{ fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>
-              👤 雇佣类型
-            </div>
-            <ul style={{ margin: 0, paddingLeft: 14, color: "#94a3b8" }}>
-              {regularCount > 0 && (
-                <li>
-                  <span style={{ color: "#cbd5e1" }}>正式岗 (Regular)</span>
-                  <span style={{ color: "#64748b", marginLeft: 6 }}>{regularCount} ({pct(regularCount, s.total)}%)</span>
-                </li>
-              )}
-              {internCount > 0 && (
-                <li>
-                  <span style={{ color: "#cbd5e1" }}>实习/学生 (Intern/Co-op)</span>
-                  <span style={{ color: "#64748b", marginLeft: 6 }}>{internCount} ({pct(internCount, s.total)}%)</span>
-                </li>
-              )}
-              {contractCount > 0 && (
-                <li>
-                  <span style={{ color: "#cbd5e1" }}>合同/外包 (Contract)</span>
-                  <span style={{ color: "#64748b", marginLeft: 6 }}>{contractCount} ({pct(contractCount, s.total)}%)</span>
-                </li>
-              )}
-              {fullTimeCount > 0 && (
-                <li>
-                  <span style={{ color: "#cbd5e1" }}>全职 (Full-time)</span>
-                  <span style={{ color: "#64748b", marginLeft: 6 }}>{fullTimeCount}</span>
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
-      </div>
+      {groups.map((g) => (
+        <BucketRow
+          key={g.bucket}
+          label={BUCKET_LABELS[g.bucket]}
+          total={g.total}
+          totalPct={pct(g.total, s.total)}
+          entries={g.entries.slice(0, 12)}
+        />
+      ))}
+      {empEntries.length > 0 && (
+        <BucketRow
+          label="👤 雇佣类型"
+          total={empEntries.reduce((sum, [, c]) => sum + c, 0)}
+          totalPct={pct(empEntries.reduce((sum, [, c]) => sum + c, 0), s.total)}
+          entries={empEntries}
+        />
+      )}
     </div>
   );
 }
