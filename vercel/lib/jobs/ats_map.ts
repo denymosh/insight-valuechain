@@ -56,6 +56,15 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       publicBase: "https://bb.wd3.myworkdayjobs.com/BlackBerry",
     },
   },
+  // QNX 是 BB 旗下的汽车软件业务（实时 OS），独立招聘门户。
+  // 单独展示，因为 QNX 是 BB 真正的增长引擎（2.35 亿辆车在用）。
+  QNX: {
+    provider: "workday",
+    config: {
+      tenant: "bb", pod: "wd3", site: "QNX",
+      publicBase: "https://bb.wd3.myworkdayjobs.com/QNX",
+    },
+  },
 
   // Greenhouse
   RKLB: {
