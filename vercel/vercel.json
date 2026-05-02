@@ -4,11 +4,16 @@
     {
       "path": "/api/cron/refresh-daily",
       "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-jobs",
+      "schedule": "0 22 * * *"
     }
   ],
   "functions": {
     "app/api/cron/refresh-prices/route.ts": { "maxDuration": 60 },
-    "app/api/cron/refresh-daily/route.ts": { "maxDuration": 60 },
+    "app/api/cron/refresh-daily/route.ts":  { "maxDuration": 60 },
+    "app/api/cron/refresh-jobs/route.ts":   { "maxDuration": 60 },
     "app/api/refresh_indicators/[symbol]/route.ts": { "maxDuration": 30 }
   }
 }
