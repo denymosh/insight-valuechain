@@ -330,6 +330,84 @@ function Section({ title, color, lines }: { title: string; color: string; lines:
   );
 }
 
+// 标的 → 行业分类映射
+type Category = {
+  label: string;
+  emoji: string;
+  symbols: string[];
+};
+
+const CATEGORIES: Category[] = [
+  { emoji: "🔬", label: "半导体", symbols: ["NVDA", "MU", "AVGO", "ADI", "INTC", "MRVL", "MCHP", "GFS"] },
+  { emoji: "🌐", label: "网络/通信", symbols: ["NOK", "CSCO", "CIEN", "VIAV", "LITE"] },
+  { emoji: "🛰️", label: "防务/航天", symbols: ["NOC", "AVAV", "TDY", "RKLB", "ACHR", "PL"] },
+  { emoji: "📐", label: "测试量测", symbols: ["FORM", "ONTO", "TTMI"] },
+  { emoji: "🔋", label: "能源工业", symbols: ["GEV", "BE", "TLN", "APD"] },
+  { emoji: "🧪", label: "材料 / 模拟", symbols: ["HXL", "MTRN", "SMTC", "ALAB"] },
+  { emoji: "💻", label: "计算/软件", symbols: ["DELL", "BB", "JBL"] },
+];
+
+function CategoryMiniCard({
+  cat, summaries, activeSym, onPick,
+}: {
+  cat: Category;
+  summaries: JobSummary[];
+  activeSym: string | null;
+  onPick: (sym: string) => void;
+}) {
+  const map = new Map(summaries.map((s) => [s.symbol, s]));
+  const items = cat.symbols.map((sym) => map.get(sym)).filter((s): s is JobSummary => !!s);
+  if (items.length === 0) return null;
+  const total = items.reduce((sum, s) => sum + s.total, 0);
+
+  return (
+    <div style={{
+      flex: "1 1 200px",
+      minWidth: 180,
+      maxWidth: 280,
+      background: "rgba(15,23,42,0.45)",
+      border: "1px solid rgba(51,65,85,0.5)",
+      borderRadius: 7,
+      padding: "8px 10px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 6,
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1" }}>
+          {cat.emoji} {cat.label}
+        </span>
+        <span style={{ fontSize: 10, color: "#64748b" }}>{total.toLocaleString()}</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {items.map((s) => {
+          const active = s.symbol === activeSym;
+          return (
+            <button
+              key={s.symbol}
+              onClick={() => onPick(s.symbol)}
+              title={`${s.symbol}: ${s.total} jobs · 7d +${s.posted_7d} · 30d +${s.posted_30d}`}
+              style={{
+                fontSize: 10.5, fontWeight: 700,
+                padding: "2px 7px",
+                borderRadius: 4,
+                border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
+                background: active ? "rgba(96,165,250,0.20)" : "rgba(51,65,85,0.20)",
+                color: active ? "#93c5fd" : "#cbd5e1",
+                cursor: "pointer",
+                lineHeight: 1.4,
+              }}
+            >
+              {s.symbol}
+              <span style={{ opacity: 0.55, fontWeight: 500, marginLeft: 4 }}>{s.total}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function RecentJobsCard() {
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -341,7 +419,6 @@ export default function RecentJobsCard() {
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
-        // 只保留有公开招聘数据的标的
         const active: JobSummary[] = (d.summaries ?? []).filter(
           (s: JobSummary) => (s.total ?? 0) > 0
         );
@@ -355,6 +432,13 @@ export default function RecentJobsCard() {
 
   const current = summaries.find((s) => s.symbol === activeSym) ?? null;
 
+  // 没匹配到任何分类的标的 → 归入"其他"
+  const knownSet = new Set(CATEGORIES.flatMap((c) => c.symbols));
+  const others = summaries.filter((s) => !knownSet.has(s.symbol));
+  const cats: Category[] = others.length
+    ? [...CATEGORIES, { emoji: "📦", label: "其他", symbols: others.map((s) => s.symbol) }]
+    : CATEGORIES;
+
   return (
     <div style={{
       marginTop: 24, marginBottom: 32,
@@ -362,44 +446,15 @@ export default function RecentJobsCard() {
       background: "rgba(15,23,42,0.3)",
       border: "1px solid rgba(51,65,85,0.4)",
       borderRadius: 10,
-      maxWidth: 1100,             // ← 收窄
+      maxWidth: 1200,
     }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        gap: 12, marginBottom: 12, flexWrap: "wrap",
-      }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>
-            📋 招聘动态分析
-          </h3>
-          <span style={{ fontSize: 11, color: "#64748b" }}>
-            基于公开招聘数据，每日刷新
-          </span>
-        </div>
-        {summaries.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {summaries.map((s) => {
-              const active = s.symbol === activeSym;
-              return (
-                <button
-                  key={s.symbol}
-                  onClick={() => setActiveSym(s.symbol)}
-                  style={{
-                    fontSize: 11, fontWeight: 700,
-                    padding: "4px 10px",
-                    borderRadius: 5,
-                    border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
-                    background: active ? "rgba(96,165,250,0.18)" : "transparent",
-                    color: active ? "#93c5fd" : "#94a3b8",
-                    cursor: "pointer",
-                  }}
-                >
-                  {s.symbol} <span style={{ opacity: 0.65, fontWeight: 500 }}>{s.total}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>
+          📋 招聘动态分析
+        </h3>
+        <span style={{ fontSize: 11, color: "#64748b" }}>
+          基于公开招聘数据，每日自动同步 · 共 {summaries.length} 个标的
+        </span>
       </div>
 
       {loading ? (
@@ -408,9 +463,28 @@ export default function RecentJobsCard() {
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>
           暂无数据，请运行 /api/cron/refresh-jobs 触发首次抓取。
         </div>
-      ) : current ? (
-        <SummaryCard s={current} />
-      ) : null}
+      ) : (
+        <>
+          {/* 分类小卡片，一行排开（自动换行） */}
+          <div style={{
+            display: "flex", flexWrap: "wrap", gap: 8,
+            marginBottom: 14,
+          }}>
+            {cats.map((cat) => (
+              <CategoryMiniCard
+                key={cat.label}
+                cat={cat}
+                summaries={summaries}
+                activeSym={activeSym}
+                onPick={setActiveSym}
+              />
+            ))}
+          </div>
+
+          {/* 当前选中标的的详细分析 */}
+          {current && <SummaryCard s={current} />}
+        </>
+      )}
     </div>
   );
 }
