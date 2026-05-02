@@ -1,6 +1,7 @@
 // Greenhouse Job Boards public REST API.
 // GET https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs?content=true
 // Returns full job list (no pagination).
+// v2: reads metadata "Job Discipline" + "Employment Type" instead of first-word title.
 
 import type { JobSummary } from "./oracle_hcm";
 
