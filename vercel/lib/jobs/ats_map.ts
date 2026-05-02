@@ -51,6 +51,20 @@ export const ATS_MAP: Record<string, AtsEntry> = {
     },
   },
   // BB 用 multi-site：合并主公司站点 + QNX 子业务（汽车软件）。
+  NVDA: {
+    provider: "workday",
+    config: {
+      tenant: "nvidia", pod: "wd5", site: "NVIDIAExternalCareerSite",
+      publicBase: "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
+    },
+  },
+  FORM: {
+    provider: "workday",
+    config: {
+      tenant: "formfactor", pod: "wd1", site: "FFI-Careers",
+      publicBase: "https://formfactor.wd1.myworkdayjobs.com/FFI-Careers",
+    },
+  },
   BB: {
     provider: "workday_multi",
     configs: [
