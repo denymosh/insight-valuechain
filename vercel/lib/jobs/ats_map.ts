@@ -3,12 +3,14 @@
 import type { OracleHcmConfig } from "./oracle_hcm";
 import type { WorkdayConfig } from "./workday";
 import type { GreenhouseConfig } from "./greenhouse";
+import type { EightfoldConfig } from "./eightfold";
 
 export type AtsEntry =
   | { provider: "oracle_hcm";    config:  OracleHcmConfig }
   | { provider: "workday";       config:  WorkdayConfig }
   | { provider: "workday_multi"; configs: WorkdayConfig[] }   // 同一公司多个 ATS 站点合并
-  | { provider: "greenhouse";    config:  GreenhouseConfig };
+  | { provider: "greenhouse";    config:  GreenhouseConfig }
+  | { provider: "eightfold";     config:  EightfoldConfig };
 
 export const ATS_MAP: Record<string, AtsEntry> = {
   // Oracle HCM Recruiting Cloud
@@ -257,6 +259,12 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       tenant: "ttmtech", pod: "wd5", site: "jobs",
       publicBase: "https://ttmtech.wd5.myworkdayjobs.com/jobs",
     },
+  },
+
+  // ── Eightfold AI ──
+  STM: {
+    provider: "eightfold",
+    config: { tenant: "stmicroelectronics", domain: "stmicroelectronics.com" },
   },
 
   // 后续可加：

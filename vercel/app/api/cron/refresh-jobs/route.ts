@@ -7,6 +7,7 @@ import { ATS_MAP } from "@/lib/jobs/ats_map";
 import { fetchOracleHcmSummary } from "@/lib/jobs/oracle_hcm";
 import { fetchWorkdaySummary, fetchMultiWorkdaySummary } from "@/lib/jobs/workday";
 import { fetchGreenhouseSummary } from "@/lib/jobs/greenhouse";
+import { fetchEightfoldSummary } from "@/lib/jobs/eightfold";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,6 +24,8 @@ async function fetchSummaryFor(symbol: string) {
       return fetchMultiWorkdaySummary(symbol.toUpperCase(), entry.configs);
     case "greenhouse":
       return fetchGreenhouseSummary(symbol.toUpperCase(), entry.config);
+    case "eightfold":
+      return fetchEightfoldSummary(symbol.toUpperCase(), entry.config);
   }
 }
 

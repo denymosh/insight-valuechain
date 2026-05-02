@@ -338,7 +338,7 @@ type Category = {
 };
 
 const CATEGORIES: Category[] = [
-  { emoji: "🔬", label: "半导体", symbols: ["NVDA", "MU", "AVGO", "ADI", "INTC", "MRVL", "MCHP", "GFS"] },
+  { emoji: "🔬", label: "半导体", symbols: ["NVDA", "MU", "AVGO", "ADI", "INTC", "MRVL", "MCHP", "GFS", "STM"] },
   { emoji: "🌐", label: "网络/通信", symbols: ["NOK", "CSCO", "CIEN", "VIAV", "LITE"] },
   { emoji: "🛰️", label: "防务/航天", symbols: ["NOC", "AVAV", "TDY", "RKLB", "ACHR", "PL"] },
   { emoji: "📐", label: "测试量测", symbols: ["FORM", "ONTO", "TTMI"] },
