@@ -5,17 +5,23 @@ import { NextResponse } from "next/server";
 import { sb } from "@/lib/supabase";
 import { ATS_MAP } from "@/lib/jobs/ats_map";
 import { fetchOracleHcmSummary } from "@/lib/jobs/oracle_hcm";
+import { fetchWorkdaySummary } from "@/lib/jobs/workday";
+import { fetchGreenhouseSummary } from "@/lib/jobs/greenhouse";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 async function fetchSummaryFor(symbol: string) {
   const entry = ATS_MAP[symbol.toUpperCase()];
   if (!entry) return null;
-  if (entry.provider === "oracle_hcm") {
-    return fetchOracleHcmSummary(symbol.toUpperCase(), entry.config);
+  switch (entry.provider) {
+    case "oracle_hcm":
+      return fetchOracleHcmSummary(symbol.toUpperCase(), entry.config);
+    case "workday":
+      return fetchWorkdaySummary(symbol.toUpperCase(), entry.config);
+    case "greenhouse":
+      return fetchGreenhouseSummary(symbol.toUpperCase(), entry.config);
   }
-  return null;
 }
 
 export async function GET(req: Request) {
@@ -32,34 +38,33 @@ export async function GET(req: Request) {
   }
 
   const symbols = Object.keys(ATS_MAP);
-  const summary: any[] = [];
 
-  for (const sym of symbols) {
-    try {
-      const s = await fetchSummaryFor(sym);
-      if (s) {
-        const { error } = await sb.from("job_summaries").upsert(
-          {
-            symbol: s.symbol,
-            total: s.total,
-            posted_7d: s.posted_7d,
-            posted_30d: s.posted_30d,
-            by_dept: s.by_dept,
-            by_country: s.by_country,
-            by_title: s.by_title,
-            fetched_at: new Date().toISOString(),
-          },
-          { onConflict: "symbol" }
-        );
-        if (error) throw new Error(error.message);
-        summary.push({ symbol: sym, total: s.total, ok: true });
-      } else {
-        summary.push({ symbol: sym, total: 0, ok: false, error: "no data" });
-      }
-    } catch (e: any) {
-      summary.push({ symbol: sym, ok: false, error: String(e?.message || e) });
-    }
-  }
+  // 并行抓取所有标的
+  const results = await Promise.allSettled(symbols.map(async (sym) => {
+    const s = await fetchSummaryFor(sym);
+    if (!s) return { symbol: sym, total: 0, ok: false, error: "no data" };
+    const { error } = await sb.from("job_summaries").upsert(
+      {
+        symbol: s.symbol,
+        total: s.total,
+        posted_7d: s.posted_7d,
+        posted_30d: s.posted_30d,
+        by_dept: s.by_dept,
+        by_country: s.by_country,
+        by_title: s.by_title,
+        fetched_at: new Date().toISOString(),
+      },
+      { onConflict: "symbol" }
+    );
+    if (error) throw new Error(error.message);
+    return { symbol: sym, total: s.total, ok: true };
+  }));
+
+  const summary = results.map((r, i) =>
+    r.status === "fulfilled"
+      ? r.value
+      : { symbol: symbols[i], ok: false, error: String(r.reason?.message || r.reason) }
+  );
 
   return NextResponse.json({ ok: true, by_symbol: summary });
 }

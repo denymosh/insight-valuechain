@@ -160,9 +160,9 @@ export default function RecentJobsCard() {
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
-        // 只保留 30 天内有新招聘的标的
+        // 只保留有公开招聘数据的标的
         const active: JobSummary[] = (d.summaries ?? []).filter(
-          (s: JobSummary) => (s.posted_30d ?? 0) > 0
+          (s: JobSummary) => (s.total ?? 0) > 0
         );
         setSummaries(active);
         if (active.length > 0) setActiveSym(active[0].symbol);
@@ -192,7 +192,7 @@ export default function RecentJobsCard() {
             📋 招聘动态分析
           </h3>
           <span style={{ fontSize: 11, color: "#64748b" }}>
-            近 30 天内有招聘活动的标的
+            基于公开招聘数据，每日刷新
           </span>
         </div>
         {summaries.length > 0 && (
@@ -213,7 +213,7 @@ export default function RecentJobsCard() {
                     cursor: "pointer",
                   }}
                 >
-                  {s.symbol} <span style={{ opacity: 0.65, fontWeight: 500 }}>+{s.posted_30d}</span>
+                  {s.symbol} <span style={{ opacity: 0.65, fontWeight: 500 }}>{s.total}</span>
                 </button>
               );
             })}

@@ -1,14 +1,16 @@
-// Map: ticker symbol → ATS (applicant tracking system) config
-// Add new entries here as we expand coverage.
+// Map: ticker symbol → ATS (applicant tracking system) config.
 
 import type { OracleHcmConfig } from "./oracle_hcm";
+import type { WorkdayConfig } from "./workday";
+import type { GreenhouseConfig } from "./greenhouse";
 
 export type AtsEntry =
-  | { provider: "oracle_hcm"; config: OracleHcmConfig };
-// Future: | { provider: "workday"; config: ... };
-//         | { provider: "greenhouse"; config: ... };
+  | { provider: "oracle_hcm"; config: OracleHcmConfig }
+  | { provider: "workday";    config: WorkdayConfig }
+  | { provider: "greenhouse"; config: GreenhouseConfig };
 
 export const ATS_MAP: Record<string, AtsEntry> = {
+  // Oracle HCM Recruiting Cloud
   NOK: {
     provider: "oracle_hcm",
     config: {
@@ -17,10 +19,53 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       publicDomain: "jobs.nokia.com",
     },
   },
-  // 后续逐步添加：
-  // CSCO: { provider: "oracle_hcm", config: { host: "...", siteNumber: "...", publicDomain: "jobs.cisco.com" } },
-  // INTC: { provider: "workday", config: { ... } },
-  // AMD:  { provider: "workday", config: { ... } },
+
+  // Workday tenants
+  MU: {
+    provider: "workday",
+    config: {
+      tenant: "micron", pod: "wd1", site: "External",
+      publicBase: "https://micron.wd1.myworkdayjobs.com/External",
+    },
+  },
+  LITE: {
+    provider: "workday",
+    config: {
+      tenant: "lumentum", pod: "wd5", site: "LITE",
+      publicBase: "https://lumentum.wd5.myworkdayjobs.com/LITE",
+    },
+  },
+  INTC: {
+    provider: "workday",
+    config: {
+      tenant: "intel", pod: "wd1", site: "External",
+      publicBase: "https://intel.wd1.myworkdayjobs.com/External",
+    },
+  },
+  MRVL: {
+    provider: "workday",
+    config: {
+      tenant: "marvell", pod: "wd1", site: "MarvellCareers",
+      publicBase: "https://marvell.wd1.myworkdayjobs.com/MarvellCareers",
+    },
+  },
+  BB: {
+    provider: "workday",
+    config: {
+      tenant: "bb", pod: "wd3", site: "BlackBerry",
+      publicBase: "https://bb.wd3.myworkdayjobs.com/BlackBerry",
+    },
+  },
+
+  // Greenhouse
+  RKLB: {
+    provider: "greenhouse",
+    config: { boardToken: "rocketlab" },
+  },
+
+  // 后续可加：
+  // ARM: iCIMS — 需要 token，暂不支持
+  // SIMO: 自建站点 — 需要 HTML 抓取，暂不支持
 };
 
 export function getAtsForSymbol(symbol: string): AtsEntry | null {
