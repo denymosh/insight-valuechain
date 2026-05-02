@@ -54,6 +54,7 @@ export async function GET(req: Request) {
         by_dept: s.by_dept,
         by_country: s.by_country,
         by_title: s.by_title,
+        by_keyword: s.by_keyword ?? null,
         fetched_at: new Date().toISOString(),
       },
       { onConflict: "symbol" }

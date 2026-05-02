@@ -10,6 +10,8 @@ export type JobSummary = {
   by_dept: Record<string, number>;
   by_country: Record<string, number>;
   by_title: Record<string, number>;
+  /** Optional: hits of tracked product keywords in job titles (e.g. {"Neutron": 14, "Electron": 8}) */
+  by_keyword?: Record<string, number>;
 };
 
 export type OracleHcmConfig = {

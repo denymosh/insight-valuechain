@@ -8,6 +8,8 @@ import type { JobSummary } from "./oracle_hcm";
 export type GreenhouseConfig = {
   /** board token, e.g. "rocketlab" */
   boardToken: string;
+  /** Product/program keywords to count in job titles, e.g. ["Neutron","Electron","Archimedes"] */
+  keywords?: string[];
 };
 
 export async function fetchGreenhouseSummary(
@@ -30,9 +32,12 @@ export async function fetchGreenhouseSummary(
   const by_dept: Record<string, number> = {};
   const by_country: Record<string, number> = {};
   const by_title: Record<string, number> = {};
+  const by_keyword: Record<string, number> = {};
 
   let posted_7d = 0;
   let posted_30d = 0;
+
+  const keywords = cfg.keywords ?? [];
 
   for (const j of jobs) {
     // ── Department: prefer metadata "Job Discipline" / "Department" / "Job Family",
@@ -81,6 +86,13 @@ export async function fetchGreenhouseSummary(
       by_title[employmentType] = (by_title[employmentType] ?? 0) + 1;
     }
 
+    // ── Product keywords in title ──
+    const title: string = String(j.title ?? "");
+    for (const kw of keywords) {
+      const re = new RegExp(`\\b${kw}\\b`, "i");
+      if (re.test(title)) by_keyword[kw] = (by_keyword[kw] ?? 0) + 1;
+    }
+
     // ── Posted recency ──
     const upd = j.updated_at ?? j.first_published ?? null;
     if (upd) {
@@ -101,5 +113,6 @@ export async function fetchGreenhouseSummary(
     by_dept,
     by_country,
     by_title,
+    by_keyword: Object.keys(by_keyword).length > 0 ? by_keyword : undefined,
   };
 }

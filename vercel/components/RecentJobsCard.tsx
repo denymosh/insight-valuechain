@@ -9,6 +9,7 @@ type JobSummary = {
   by_dept: Record<string, number>;
   by_country: Record<string, number>;
   by_title: Record<string, number>;
+  by_keyword?: Record<string, number> | null;
   fetched_at: string;
 };
 
@@ -126,8 +127,9 @@ function SummaryCard({ s }: { s: JobSummary }) {
   const topDepts = topN(s.by_dept, 3);
   const topCountries = topN(s.by_country, 3);
   const topTitles = topN(s.by_title, 3);
-  const rdCount  = s.by_dept["Applied R&D"] ?? s.by_dept["R&D"] ?? 0;
-  const rdPct    = pct(rdCount, s.total);
+  // 用 regex 算 R&D（兼容所有 ATS 不同的命名）
+  const rdCount = aggMatch(s.by_dept, /r&?d|research|engineer|design|hardware|software|silicon|verification|test|product develop/i);
+  const rdPct   = pct(rdCount, s.total);
 
   const overviewLines = [
     `${s.total} 个开放职位`,
@@ -136,6 +138,15 @@ function SummaryCard({ s }: { s: JobSummary }) {
     `地点: ${topCountries.map(([n, c]) => `${n} ${c}`).join(" · ")}`,
     `职位类型: ${topTitles.map(([n, c]) => `${n} ${c}`).join(" · ")}`,
   ];
+
+  // 关键产品/项目维度（如 RKLB 跟踪 Neutron / Electron / Archimedes）
+  if (s.by_keyword && Object.keys(s.by_keyword).length > 0) {
+    const kwLine = Object.entries(s.by_keyword)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${v}`)
+      .join(" · ");
+    overviewLines.push(`关键项目: ${kwLine}`);
+  }
 
   return (
     <div style={{

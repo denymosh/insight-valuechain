@@ -61,10 +61,16 @@ export const ATS_MAP: Record<string, AtsEntry> = {
     ],
   },
 
-  // Greenhouse
+  // Greenhouse — RKLB 跟踪关键产品/项目招聘热度
   RKLB: {
     provider: "greenhouse",
-    config: { boardToken: "rocketlab" },
+    config: {
+      boardToken: "rocketlab",
+      // Neutron = 下一代中型火箭，Electron = 现役小火箭，
+      // Archimedes = Neutron 用的引擎，Rutherford = Electron 引擎，
+      // Photon = 卫星总线产品
+      keywords: ["Neutron", "Electron", "Archimedes", "Rutherford", "Photon"],
+    },
   },
 
   // 后续可加：
