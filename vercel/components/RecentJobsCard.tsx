@@ -20,6 +20,50 @@ function topN(map: Record<string, number>, n = 5): [string, number][] {
   return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n);
 }
 
+type DeptBucket = "rd" | "manuf" | "tech" | "sales" | "support";
+
+/** Categorize a department / category name into one of 5 buckets. Order matters. */
+function bucketDept(name: string): DeptBucket {
+  const n = name.toLowerCase();
+  // Technician 必须优先（避免 "Technician - ..." 被工程类抢走）
+  if (/^technician|^operator|^assembly\b|cnc|machinist|welder|fabrication/.test(n)) return "tech";
+  // 工程/研发（最宽泛的桶）
+  if (/engineer|software|hardware|firmware|design|silicon|verification|r&?d|research|product develop|systems|gnc|architect|electronic|mechanical|structural|thermal|propulsion|optical|payload|spacecraft|launch|recovery|analysis|simulation|test\b/.test(n)) return "rd";
+  // 制造/工艺（非工程类）
+  if (/manufactur|production|process|equipment|maintenance/.test(n)) return "manuf";
+  // 销售/市场
+  if (/sales|marketing|business develop|commercial|pre-?sales/.test(n)) return "sales";
+  // 默认 → 后台
+  return "support";
+}
+
+const BUCKET_LABELS: Record<DeptBucket, string> = {
+  rd:      "🔬 工程 / 研发",
+  manuf:   "🏭 制造 / 工艺",
+  tech:    "🔧 技师 / 操作",
+  sales:   "💼 销售 / 市场",
+  support: "📊 后台 / 支持",
+};
+
+/** Group dept map by bucket, return entries + subtotal per bucket. */
+function groupDepts(by_dept: Record<string, number>):
+  { bucket: DeptBucket; total: number; entries: [string, number][] }[] {
+  const groups: Record<DeptBucket, [string, number][]> = {
+    rd: [], manuf: [], tech: [], sales: [], support: [],
+  };
+  for (const [name, cnt] of Object.entries(by_dept)) {
+    groups[bucketDept(name)].push([name, cnt]);
+  }
+  const order: DeptBucket[] = ["rd", "manuf", "tech", "sales", "support"];
+  return order
+    .map((b) => ({
+      bucket: b,
+      total: groups[b].reduce((s, [, c]) => s + c, 0),
+      entries: groups[b].sort((a, b) => b[1] - a[1]),
+    }))
+    .filter((g) => g.entries.length > 0);
+}
+
 function pct(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 100) : 0;
 }
@@ -177,6 +221,94 @@ function SummaryCard({ s }: { s: JobSummary }) {
                  lines={positive.length ? positive : ["—"]} />
         <Section title="⚠️ 需要注意" color="#fdba74"
                  lines={caution.length ? caution : ["—"]} />
+      </div>
+
+      <DeptBreakdown s={s} />
+    </div>
+  );
+}
+
+function DeptBreakdown({ s }: { s: JobSummary }) {
+  const groups = groupDepts(s.by_dept);
+  if (groups.length === 0) return null;
+
+  // 雇佣类型分组
+  const regularCount  = aggMatch(s.by_title, /^regular$/i);
+  const internCount   = aggMatch(s.by_title, /intern|trainee|student|co-op/i);
+  const contractCount = aggMatch(s.by_title, /contract|contingent|fixed[\s-]?term/i);
+  const fullTimeCount = aggMatch(s.by_title, /^full[\s-]?time$/i);
+
+  return (
+    <div style={{
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: "1px dashed rgba(51,65,85,0.5)",
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1", marginBottom: 8 }}>
+        📋 详细职位分布
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 18px" }}>
+        {groups.map((g) => {
+          const pctV = pct(g.total, s.total);
+          return (
+            <div key={g.bucket} style={{ fontSize: 11, lineHeight: 1.55, color: "#cbd5e1" }}>
+              <div style={{ fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>
+                {BUCKET_LABELS[g.bucket]}
+                <span style={{ marginLeft: 8, color: "#64748b", fontWeight: 500 }}>
+                  小计 {g.total} ({pctV}%)
+                </span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 14, color: "#94a3b8" }}>
+                {g.entries.slice(0, 8).map(([n, c]) => (
+                  <li key={n}>
+                    <span style={{ color: "#cbd5e1" }}>{n}</span>
+                    <span style={{ color: "#64748b", marginLeft: 6 }}>{c}</span>
+                  </li>
+                ))}
+                {g.entries.length > 8 && (
+                  <li style={{ color: "#64748b", listStyle: "none", paddingLeft: 0 }}>
+                    +{g.entries.length - 8} 项
+                  </li>
+                )}
+              </ul>
+            </div>
+          );
+        })}
+
+        {/* 雇佣类型 — 只在有数据时显示 */}
+        {(regularCount + internCount + contractCount + fullTimeCount) > 0 && (
+          <div style={{ fontSize: 11, lineHeight: 1.55, color: "#cbd5e1" }}>
+            <div style={{ fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>
+              👤 雇佣类型
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 14, color: "#94a3b8" }}>
+              {regularCount > 0 && (
+                <li>
+                  <span style={{ color: "#cbd5e1" }}>正式岗 (Regular)</span>
+                  <span style={{ color: "#64748b", marginLeft: 6 }}>{regularCount} ({pct(regularCount, s.total)}%)</span>
+                </li>
+              )}
+              {internCount > 0 && (
+                <li>
+                  <span style={{ color: "#cbd5e1" }}>实习/学生 (Intern/Co-op)</span>
+                  <span style={{ color: "#64748b", marginLeft: 6 }}>{internCount} ({pct(internCount, s.total)}%)</span>
+                </li>
+              )}
+              {contractCount > 0 && (
+                <li>
+                  <span style={{ color: "#cbd5e1" }}>合同/外包 (Contract)</span>
+                  <span style={{ color: "#64748b", marginLeft: 6 }}>{contractCount} ({pct(contractCount, s.total)}%)</span>
+                </li>
+              )}
+              {fullTimeCount > 0 && (
+                <li>
+                  <span style={{ color: "#cbd5e1" }}>全职 (Full-time)</span>
+                  <span style={{ color: "#64748b", marginLeft: 6 }}>{fullTimeCount}</span>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
