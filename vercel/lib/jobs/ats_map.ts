@@ -111,6 +111,153 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       keywords: ["Neutron", "Electron", "Archimedes", "Rutherford", "Photon"],
     },
   },
+  ALAB: {
+    provider: "greenhouse",
+    config: { boardToken: "asteralabs" },
+  },
+  ACHR: {
+    provider: "greenhouse",
+    config: { boardToken: "archer56" },
+  },
+
+  // ── 半导体大厂 ──
+  AVGO: {
+    provider: "workday",
+    config: {
+      tenant: "broadcom", pod: "wd1", site: "External_Career",
+      publicBase: "https://broadcom.wd1.myworkdayjobs.com/External_Career",
+    },
+  },
+  ADI: {
+    provider: "workday",
+    config: {
+      tenant: "analogdevices", pod: "wd1", site: "External",
+      publicBase: "https://analogdevices.wd1.myworkdayjobs.com/External",
+    },
+  },
+  MCHP: {
+    provider: "workday",
+    config: {
+      tenant: "microchiphr", pod: "wd5", site: "External",
+      publicBase: "https://microchiphr.wd5.myworkdayjobs.com/External",
+    },
+  },
+  GFS: {
+    provider: "workday",
+    config: {
+      tenant: "globalfoundries", pod: "wd1", site: "External",
+      publicBase: "https://globalfoundries.wd1.myworkdayjobs.com/External",
+    },
+  },
+  CIEN: {
+    provider: "workday",
+    config: {
+      tenant: "ciena", pod: "wd5", site: "Careers",
+      publicBase: "https://ciena.wd5.myworkdayjobs.com/Careers",
+    },
+  },
+  VIAV: {
+    provider: "workday",
+    config: {
+      tenant: "viavisolutions", pod: "wd1", site: "careers",
+      publicBase: "https://viavisolutions.wd1.myworkdayjobs.com/careers",
+    },
+  },
+
+  // ── 防务/航天 ──
+  NOC: {
+    provider: "workday",
+    config: {
+      tenant: "ngc", pod: "wd1", site: "Northrop_Grumman_External_Site",
+      publicBase: "https://ngc.wd1.myworkdayjobs.com/Northrop_Grumman_External_Site",
+    },
+  },
+  AVAV: {
+    provider: "workday",
+    config: {
+      tenant: "avav", pod: "wd1", site: "AVAV",
+      publicBase: "https://avav.wd1.myworkdayjobs.com/AVAV",
+    },
+  },
+  TDY: {
+    provider: "workday",
+    config: {
+      // Teledyne 用 FLIR 收购后的 Workday tenant
+      tenant: "flir", pod: "wd1", site: "flircareers",
+      publicBase: "https://flir.wd1.myworkdayjobs.com/flircareers",
+    },
+  },
+
+  // ── 大科技 / 数据中心 ──
+  DELL: {
+    provider: "workday",
+    config: {
+      tenant: "dell", pod: "wd1", site: "External",
+      publicBase: "https://dell.wd1.myworkdayjobs.com/External",
+    },
+  },
+
+  // ── 能源 / 工业 ──
+  BE: {
+    provider: "workday",
+    config: {
+      tenant: "bloomenergy", pod: "wd1", site: "BloomEnergyCareers",
+      publicBase: "https://bloomenergy.wd1.myworkdayjobs.com/BloomEnergyCareers",
+    },
+  },
+  GEV: {
+    provider: "workday",
+    config: {
+      tenant: "gevernova", pod: "wd5", site: "Vernova_ExternalSite",
+      publicBase: "https://gevernova.wd5.myworkdayjobs.com/Vernova_ExternalSite",
+    },
+  },
+  TLN: {
+    provider: "workday",
+    config: {
+      tenant: "talenenergy", pod: "wd1", site: "TalenCareers",
+      publicBase: "https://talenenergy.wd1.myworkdayjobs.com/TalenCareers",
+    },
+  },
+  APD: {
+    provider: "workday",
+    config: {
+      tenant: "airproducts", pod: "wd5", site: "AP0001",
+      publicBase: "https://airproducts.wd5.myworkdayjobs.com/AP0001",
+    },
+  },
+
+  // ── 材料/特殊金属 ──
+  HXL: {
+    provider: "workday",
+    config: {
+      tenant: "hexcel", pod: "wd5", site: "HexcelCareers",
+      publicBase: "https://hexcel.wd5.myworkdayjobs.com/HexcelCareers",
+    },
+  },
+  MTRN: {
+    provider: "workday",
+    config: {
+      tenant: "materion", pod: "wd5", site: "Materion",
+      publicBase: "https://materion.wd5.myworkdayjobs.com/Materion",
+    },
+  },
+
+  // ── 制造服务 ──
+  JBL: {
+    provider: "workday",
+    config: {
+      tenant: "jabil", pod: "wd5", site: "Jabil_Careers",
+      publicBase: "https://jabil.wd5.myworkdayjobs.com/Jabil_Careers",
+    },
+  },
+  TTMI: {
+    provider: "workday",
+    config: {
+      tenant: "ttmtech", pod: "wd5", site: "jobs",
+      publicBase: "https://ttmtech.wd5.myworkdayjobs.com/jobs",
+    },
+  },
 
   // 后续可加：
   // ARM: iCIMS — 需要 token，暂不支持

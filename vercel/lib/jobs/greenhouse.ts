@@ -105,6 +105,24 @@ export async function fetchGreenhouseSummary(
     }
   }
 
+  // Fallback: 如果 jobs[].metadata/departments 都没有部门数据，
+  // 调用 /departments 端点（少数 Greenhouse tenant 像 Planet Labs 用这个）
+  if (Object.keys(by_dept).length === 0) {
+    try {
+      const deptUrl = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(cfg.boardToken)}/departments`;
+      const dr = await fetch(deptUrl, { headers: { Accept: "application/json" } });
+      if (dr.ok) {
+        const dj = await dr.json();
+        const depts: any[] = dj?.departments ?? [];
+        for (const d of depts) {
+          const name = String(d?.name ?? "").trim();
+          const count = Array.isArray(d?.jobs) ? d.jobs.length : Number(d?.job_count ?? 0);
+          if (name && count) by_dept[name] = (by_dept[name] ?? 0) + count;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   return {
     symbol,
     total,
