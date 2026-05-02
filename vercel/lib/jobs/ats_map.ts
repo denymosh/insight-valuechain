@@ -72,6 +72,20 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       publicBase: "https://onto.wd1.myworkdayjobs.com/ONTO_Careers",
     },
   },
+  CSCO: {
+    provider: "workday",
+    config: {
+      tenant: "cisco", pod: "wd5", site: "Cisco_Careers",
+      publicBase: "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers",
+    },
+  },
+  SMTC: {
+    provider: "workday",
+    config: {
+      tenant: "semtech", pod: "wd1", site: "SemtechCareers",
+      publicBase: "https://semtech.wd1.myworkdayjobs.com/SemtechCareers",
+    },
+  },
   PL: {
     provider: "greenhouse",
     config: { boardToken: "planetlabs" },
