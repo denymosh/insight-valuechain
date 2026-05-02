@@ -51,6 +51,33 @@ function facetToMap(facetValues: any[] | undefined): Record<string, number> {
   return out;
 }
 
+/** Merge multiple JobSummary results (same symbol, different ATS sites). */
+export async function fetchMultiWorkdaySummary(
+  symbol: string,
+  configs: WorkdayConfig[]
+): Promise<JobSummary | null> {
+  const results = await Promise.all(configs.map((c) => fetchWorkdaySummary(symbol, c)));
+  const valid = results.filter((r): r is JobSummary => r !== null);
+  if (valid.length === 0) return null;
+
+  let total = 0, posted_7d = 0, posted_30d = 0;
+  const by_dept:    Record<string, number> = {};
+  const by_country: Record<string, number> = {};
+  const by_title:   Record<string, number> = {};
+  const addAll = (dst: Record<string, number>, src: Record<string, number>) => {
+    for (const [k, v] of Object.entries(src)) dst[k] = (dst[k] ?? 0) + v;
+  };
+  for (const r of valid) {
+    total      += r.total;
+    posted_7d  += r.posted_7d;
+    posted_30d += r.posted_30d;
+    addAll(by_dept,    r.by_dept);
+    addAll(by_country, r.by_country);
+    addAll(by_title,   r.by_title);
+  }
+  return { symbol, total, posted_7d, posted_30d, by_dept, by_country, by_title };
+}
+
 export async function fetchWorkdaySummary(
   symbol: string,
   cfg: WorkdayConfig

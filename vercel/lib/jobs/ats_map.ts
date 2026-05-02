@@ -5,9 +5,10 @@ import type { WorkdayConfig } from "./workday";
 import type { GreenhouseConfig } from "./greenhouse";
 
 export type AtsEntry =
-  | { provider: "oracle_hcm"; config: OracleHcmConfig }
-  | { provider: "workday";    config: WorkdayConfig }
-  | { provider: "greenhouse"; config: GreenhouseConfig };
+  | { provider: "oracle_hcm";    config:  OracleHcmConfig }
+  | { provider: "workday";       config:  WorkdayConfig }
+  | { provider: "workday_multi"; configs: WorkdayConfig[] }   // 同一公司多个 ATS 站点合并
+  | { provider: "greenhouse";    config:  GreenhouseConfig };
 
 export const ATS_MAP: Record<string, AtsEntry> = {
   // Oracle HCM Recruiting Cloud
@@ -49,21 +50,15 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       publicBase: "https://marvell.wd1.myworkdayjobs.com/MarvellCareers",
     },
   },
+  // BB 用 multi-site：合并主公司站点 + QNX 子业务（汽车软件）。
   BB: {
-    provider: "workday",
-    config: {
-      tenant: "bb", pod: "wd3", site: "BlackBerry",
-      publicBase: "https://bb.wd3.myworkdayjobs.com/BlackBerry",
-    },
-  },
-  // QNX 是 BB 旗下的汽车软件业务（实时 OS），独立招聘门户。
-  // 单独展示，因为 QNX 是 BB 真正的增长引擎（2.35 亿辆车在用）。
-  QNX: {
-    provider: "workday",
-    config: {
-      tenant: "bb", pod: "wd3", site: "QNX",
-      publicBase: "https://bb.wd3.myworkdayjobs.com/QNX",
-    },
+    provider: "workday_multi",
+    configs: [
+      { tenant: "bb", pod: "wd3", site: "BlackBerry",
+        publicBase: "https://bb.wd3.myworkdayjobs.com/BlackBerry" },
+      { tenant: "bb", pod: "wd3", site: "QNX",
+        publicBase: "https://bb.wd3.myworkdayjobs.com/QNX" },
+    ],
   },
 
   // Greenhouse

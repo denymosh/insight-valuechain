@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { sb } from "@/lib/supabase";
 import { ATS_MAP } from "@/lib/jobs/ats_map";
 import { fetchOracleHcmSummary } from "@/lib/jobs/oracle_hcm";
-import { fetchWorkdaySummary } from "@/lib/jobs/workday";
+import { fetchWorkdaySummary, fetchMultiWorkdaySummary } from "@/lib/jobs/workday";
 import { fetchGreenhouseSummary } from "@/lib/jobs/greenhouse";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,8 @@ async function fetchSummaryFor(symbol: string) {
       return fetchOracleHcmSummary(symbol.toUpperCase(), entry.config);
     case "workday":
       return fetchWorkdaySummary(symbol.toUpperCase(), entry.config);
+    case "workday_multi":
+      return fetchMultiWorkdaySummary(symbol.toUpperCase(), entry.configs);
     case "greenhouse":
       return fetchGreenhouseSummary(symbol.toUpperCase(), entry.config);
   }
