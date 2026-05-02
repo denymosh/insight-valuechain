@@ -65,6 +65,17 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       publicBase: "https://formfactor.wd1.myworkdayjobs.com/FFI-Careers",
     },
   },
+  ONTO: {
+    provider: "workday",
+    config: {
+      tenant: "onto", pod: "wd1", site: "ONTO_Careers",
+      publicBase: "https://onto.wd1.myworkdayjobs.com/ONTO_Careers",
+    },
+  },
+  PL: {
+    provider: "greenhouse",
+    config: { boardToken: "planetlabs" },
+  },
   BB: {
     provider: "workday_multi",
     configs: [
