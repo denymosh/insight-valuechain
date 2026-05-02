@@ -1,7 +1,7 @@
 // Greenhouse Job Boards public REST API.
 // GET https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs?content=true
 // Returns full job list (no pagination).
-// v2: reads metadata "Job Discipline" + "Employment Type" instead of first-word title.
+// v3: tracks per-tenant product keywords (e.g. RKLB Neutron/Electron) via cfg.keywords.
 
 import type { JobSummary } from "./oracle_hcm";
 
