@@ -4,13 +4,15 @@ import type { OracleHcmConfig } from "./oracle_hcm";
 import type { WorkdayConfig } from "./workday";
 import type { GreenhouseConfig } from "./greenhouse";
 import type { EightfoldConfig } from "./eightfold";
+import type { LeverConfig } from "./lever";
 
 export type AtsEntry =
   | { provider: "oracle_hcm";    config:  OracleHcmConfig }
   | { provider: "workday";       config:  WorkdayConfig }
   | { provider: "workday_multi"; configs: WorkdayConfig[] }   // 同一公司多个 ATS 站点合并
   | { provider: "greenhouse";    config:  GreenhouseConfig }
-  | { provider: "eightfold";     config:  EightfoldConfig };
+  | { provider: "eightfold";     config:  EightfoldConfig }
+  | { provider: "lever";         config:  LeverConfig };
 
 export const ATS_MAP: Record<string, AtsEntry> = {
   // Oracle HCM Recruiting Cloud
@@ -265,6 +267,24 @@ export const ATS_MAP: Record<string, AtsEntry> = {
   STM: {
     provider: "eightfold",
     config: { tenant: "stmicroelectronics", domain: "stmicroelectronics.com" },
+  },
+
+  // ── Oracle HCM (custom path prefix when no own domain) ──
+  // Coherent — hcwp.fa.us2.oraclecloud.com 对外通过 hcmUI/CandidateExperience 暴露
+  COHR: {
+    provider: "oracle_hcm",
+    config: {
+      host: "hcwp.fa.us2.oraclecloud.com",
+      siteNumber: "CX_1",
+      // publicDomain 包含完整路径前缀，让 careers_url + job links 拼接正确
+      publicDomain: "hcwp.fa.us2.oraclecloud.com/hcmUI/CandidateExperience",
+    },
+  },
+
+  // ── Lever ──
+  PLTR: {
+    provider: "lever",
+    config: { company: "palantir" },
   },
 
   // 后续可加：

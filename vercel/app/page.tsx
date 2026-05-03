@@ -94,8 +94,11 @@ export default function Page() {
       setCategories(data.categories);
       setTickers(data.tickers);
       setLastUpdated(new Date());
-      // pick first sector if nothing active
-      if (activeSector == null && data.sectors.length > 0) setActiveSector(data.sectors[0].id);
+      // pick first sector ONLY on initial mount (functional update avoids stale-closure bug
+      // where 30s polling kept resetting activeSector to first sector)
+      if (data.sectors.length > 0) {
+        setActiveSector((cur) => cur ?? data.sectors[0].id);
+      }
     } catch (e) {
       // swallow — next poll will retry
     }

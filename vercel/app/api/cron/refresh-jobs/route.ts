@@ -8,6 +8,7 @@ import { fetchOracleHcmSummary } from "@/lib/jobs/oracle_hcm";
 import { fetchWorkdaySummary, fetchMultiWorkdaySummary } from "@/lib/jobs/workday";
 import { fetchGreenhouseSummary } from "@/lib/jobs/greenhouse";
 import { fetchEightfoldSummary } from "@/lib/jobs/eightfold";
+import { fetchLeverSummary } from "@/lib/jobs/lever";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,6 +27,8 @@ async function fetchSummaryFor(symbol: string) {
       return fetchGreenhouseSummary(symbol.toUpperCase(), entry.config);
     case "eightfold":
       return fetchEightfoldSummary(symbol.toUpperCase(), entry.config);
+    case "lever":
+      return fetchLeverSummary(symbol.toUpperCase(), entry.config);
   }
 }
 
