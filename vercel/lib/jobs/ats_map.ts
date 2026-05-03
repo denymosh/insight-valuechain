@@ -282,9 +282,24 @@ export const ATS_MAP: Record<string, AtsEntry> = {
   },
 
   // ── Lever ──
+  // Palantir 用代号化的团队名 + 在 title 里嵌入产品/客户线
   PLTR: {
     provider: "lever",
-    config: { company: "palantir" },
+    config: {
+      company: "palantir",
+      teamLabels: {
+        "Delta": "Forward Deployed Engineer (FDE)",
+        "Echo":  "Forward Deployed Strategist (FDS)",
+        "Dev":   "Software Development",
+      },
+      // Foundry / Gotham / AIP / Apollo = 核心产品；
+      // US Government / Defense / Intelligence = 客户线
+      keywords: [
+        "Foundry", "Gotham", "AIP", "Apollo", "MetaConstellation",
+        "US Government", "USG", "Defense", "Intelligence",
+        "Commercial", "Healthcare", "Energy",
+      ],
+    },
   },
 
   // 后续可加：

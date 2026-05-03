@@ -7,6 +7,12 @@ import type { JobSummary } from "./oracle_hcm";
 export type LeverConfig = {
   /** company slug, e.g. "palantir" */
   company: string;
+  /** Optional: translate codename teams to descriptive labels.
+   *  e.g. { "Delta": "Forward Deployed Engineer", "Echo": "Forward Deployed Strategist" } */
+  teamLabels?: Record<string, string>;
+  /** Optional: count product/program keywords found in job titles.
+   *  e.g. ["Gotham", "Foundry", "AIP", "Apollo", "US Government"] */
+  keywords?: string[];
 };
 
 const UA =
@@ -31,9 +37,13 @@ export async function fetchLeverSummary(
   const by_dept: Record<string, number> = {};
   const by_country: Record<string, number> = {};
   const by_title: Record<string, number> = {};
+  const by_keyword: Record<string, number> = {};
 
   let posted_7d = 0;
   let posted_30d = 0;
+
+  const keywords = cfg.keywords ?? [];
+  const teamLabels = cfg.teamLabels ?? {};
 
   for (const j of jobs) {
     const team = String(j?.categories?.team ?? "").trim();
@@ -41,10 +51,18 @@ export async function fetchLeverSummary(
     const loc  = String(j?.categories?.location ?? "").trim();
     const country = String(j?.country ?? "").trim();
     const commitment = String(j?.categories?.commitment ?? "").trim();
+    const title = String(j?.text ?? "");  // Lever uses 'text' for the job title
 
-    // Department: prefer team, fall back to department
-    const deptName = team || dept;
+    // Department: prefer team (with label translation), fall back to department
+    const rawDept = team || dept;
+    const deptName = teamLabels[rawDept] ?? rawDept;
     if (deptName) by_dept[deptName] = (by_dept[deptName] ?? 0) + 1;
+
+    // Product/program keywords scanned in title
+    for (const kw of keywords) {
+      const re = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+      if (re.test(title)) by_keyword[kw] = (by_keyword[kw] ?? 0) + 1;
+    }
 
     // Country: prefer ISO country code, fall back to last comma part of location
     if (country) {
@@ -76,6 +94,7 @@ export async function fetchLeverSummary(
     by_dept,
     by_country,
     by_title,
+    by_keyword: Object.keys(by_keyword).length > 0 ? by_keyword : undefined,
     careers_url: `https://jobs.lever.co/${encodeURIComponent(cfg.company)}`,
   };
 }
