@@ -58,10 +58,19 @@ export async function fetchLeverSummary(
     const deptName = teamLabels[rawDept] ?? rawDept;
     if (deptName) by_dept[deptName] = (by_dept[deptName] ?? 0) + 1;
 
-    // Product/program keywords scanned in title
-    for (const kw of keywords) {
-      const re = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-      if (re.test(title)) by_keyword[kw] = (by_keyword[kw] ?? 0) + 1;
+    // Product/program keywords scanned in title + description + lists
+    // (Palantir's product names like Foundry/Gotham/AIP appear in description, not title)
+    if (keywords.length > 0) {
+      const descPlain = String(j?.descriptionPlain ?? "");
+      const addlPlain = String(j?.additionalPlain ?? "");
+      const listsText = Array.isArray(j?.lists)
+        ? j.lists.map((l: any) => String(l?.content ?? "")).join(" ")
+        : "";
+      const haystack = `${title} ${descPlain} ${addlPlain} ${listsText}`;
+      for (const kw of keywords) {
+        const re = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+        if (re.test(haystack)) by_keyword[kw] = (by_keyword[kw] ?? 0) + 1;
+      }
     }
 
     // Country: prefer ISO country code, fall back to last comma part of location
