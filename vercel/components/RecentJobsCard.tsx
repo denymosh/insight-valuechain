@@ -348,29 +348,95 @@ function shortCatName(name: string): string {
   return name.replace(/\s*[（(].*?[)）]\s*/g, "").trim();
 }
 
+// 高亮规则：评估每个标的是否值得关注
+type ChipFlag = "hot" | "rd" | "big";
+function getChipFlags(s: JobSummary): { flags: ChipFlag[]; tint: ChipFlag | null; reason: string[] } {
+  const flags: ChipFlag[] = [];
+  const reasons: string[] = [];
+
+  // 🔥 招聘加速：7 天新增 ≥ 15 个 OR 占比 ≥ 5%
+  const post7Pct = s.total > 0 ? (s.posted_7d / s.total) * 100 : 0;
+  if (s.posted_7d >= 15 || (s.posted_7d > 0 && post7Pct >= 5)) {
+    flags.push("hot");
+    reasons.push(`🔥 7 天新增 ${s.posted_7d} 个 (${post7Pct.toFixed(1)}%)`);
+  }
+
+  // 💎 R&D 重投入：R&D / 工程岗占比 ≥ 50%
+  const rdCount = aggMatch(s.by_dept, /r&?d|research|engineer|design|hardware|software|silicon|verification|firmware|systems/i);
+  const rdPct = s.total > 0 ? (rdCount / s.total) * 100 : 0;
+  if (rdPct >= 50) {
+    flags.push("rd");
+    reasons.push(`💎 R&D ${rdCount} 个 (${rdPct.toFixed(0)}%)`);
+  }
+
+  // 📊 招聘体量大：总职位 ≥ 1000
+  if (s.total >= 1000) {
+    flags.push("big");
+    reasons.push(`📊 总量 ${s.total.toLocaleString()}`);
+  }
+
+  // 优先级 tint：hot > rd > big
+  const tint: ChipFlag | null = flags.includes("hot") ? "hot"
+    : flags.includes("rd") ? "rd"
+    : flags.includes("big") ? "big"
+    : null;
+
+  return { flags, tint, reason: reasons };
+}
+
+const FLAG_EMOJI: Record<ChipFlag, string> = { hot: "🔥", rd: "💎", big: "📊" };
+
+const TINT_STYLE: Record<ChipFlag, { bg: string; border: string; color: string }> = {
+  hot: { bg: "rgba(251,146,60,0.18)",  border: "rgba(251,146,60,0.55)", color: "#fdba74" },
+  rd:  { bg: "rgba(167,139,250,0.16)", border: "rgba(167,139,250,0.50)", color: "#c4b5fd" },
+  big: { bg: "rgba(34,197,94,0.14)",   border: "rgba(34,197,94,0.45)",  color: "#86efac" },
+};
+
 function TickerChip({
   s, active, onPick,
 }: {
   s: JobSummary; active: boolean; onPick: (sym: string) => void;
 }) {
+  const { flags, tint, reason } = getChipFlags(s);
+  const tintStyle = !active && tint ? TINT_STYLE[tint] : null;
+
+  const borderColor = active
+    ? "rgba(96,165,250,0.55)"
+    : (tintStyle?.border ?? "rgba(51,65,85,0.55)");
+  const bgColor = active
+    ? "rgba(96,165,250,0.20)"
+    : (tintStyle?.bg ?? "rgba(51,65,85,0.20)");
+  const textColor = active
+    ? "#93c5fd"
+    : (tintStyle?.color ?? "#cbd5e1");
+
+  const baseTitle = `${s.symbol}: ${s.total} jobs · 7d +${s.posted_7d} · 30d +${s.posted_30d}`;
+  const title = reason.length > 0 ? `${baseTitle}\n${reason.join("\n")}` : baseTitle;
+
   return (
     <span style={{ display: "inline-flex", alignItems: "stretch", gap: 0, lineHeight: 1.4 }}>
       <button
         onClick={() => onPick(s.symbol)}
-        title={`${s.symbol}: ${s.total} jobs · 7d +${s.posted_7d} · 30d +${s.posted_30d}`}
+        title={title}
         style={{
           fontSize: 10.5, fontWeight: 700,
           padding: "2px 7px",
           borderRadius: s.careers_url ? "4px 0 0 4px" : 4,
           borderRight: s.careers_url ? "none" : undefined,
-          border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
-          background: active ? "rgba(96,165,250,0.20)" : "rgba(51,65,85,0.20)",
-          color: active ? "#93c5fd" : "#cbd5e1",
+          border: `1px solid ${borderColor}`,
+          background: bgColor,
+          color: textColor,
           cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: 3,
         }}
       >
+        {flags.length > 0 && (
+          <span style={{ fontSize: 9, lineHeight: 1 }}>
+            {flags.map((f) => FLAG_EMOJI[f]).join("")}
+          </span>
+        )}
         {s.symbol}
-        <span style={{ opacity: 0.55, fontWeight: 500, marginLeft: 4 }}>{s.total}</span>
+        <span style={{ opacity: 0.6, fontWeight: 500 }}>{s.total}</span>
       </button>
       {s.careers_url && (
         <a
@@ -383,15 +449,16 @@ function TickerChip({
             display: "inline-flex", alignItems: "center", justifyContent: "center",
             padding: "0 5px",
             fontSize: 10,
-            border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
+            border: `1px solid ${borderColor}`,
             borderLeft: "none",
             borderRadius: "0 4px 4px 0",
-            background: active ? "rgba(96,165,250,0.10)" : "rgba(51,65,85,0.10)",
-            color: active ? "#93c5fd" : "#94a3b8",
+            background: tintStyle ? tintStyle.bg : (active ? "rgba(96,165,250,0.10)" : "rgba(51,65,85,0.10)"),
+            color: textColor,
             textDecoration: "none",
+            opacity: 0.85,
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#60a5fa"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = active ? "#93c5fd" : "#94a3b8"; }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
         >↗</a>
       )}
     </span>
@@ -519,15 +586,22 @@ export default function RecentJobsCard({ activeSector }: { activeSector?: number
       borderRadius: 10,
       maxWidth: 1200,
     }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>
-          📋 招聘动态分析
-        </h3>
-        <span style={{ fontSize: 11, color: "#64748b" }}>
-          {activeSector == null
-            ? `每日自动同步 · 共 ${summaries.length} 个标的`
-            : `当前赛道 · ${symsInActiveSector.size} 个有招聘数据`}
-        </span>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>
+            📋 招聘动态分析
+          </h3>
+          <span style={{ fontSize: 11, color: "#64748b" }}>
+            {activeSector == null
+              ? `每日自动同步 · 共 ${summaries.length} 个标的`
+              : `当前赛道 · ${symsInActiveSector.size} 个有招聘数据`}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 10, fontSize: 10, color: "#64748b" }}>
+          <span><span style={{ color: "#fdba74" }}>🔥</span> 招聘加速</span>
+          <span><span style={{ color: "#c4b5fd" }}>💎</span> R&D 重投入</span>
+          <span><span style={{ color: "#86efac" }}>📊</span> 体量大</span>
+        </div>
       </div>
 
       {loading ? (
