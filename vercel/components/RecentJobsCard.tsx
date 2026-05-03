@@ -434,7 +434,7 @@ function CategoryMiniCard({
   );
 }
 
-export default function RecentJobsCard() {
+export default function RecentJobsCard({ activeSector }: { activeSector?: number | null }) {
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -477,14 +477,38 @@ export default function RecentJobsCard() {
     symToCats.get(t.symbol)!.add(t.category_id);
   }
 
-  // 按 sector 分组
-  const sortedSectors = [...sectors].sort((a, b) => a.sort_order - b.sort_order);
+  // 按 sector 分组（只保留 activeSector，如果没传或为 null 则显示全部）
+  const sortedSectors = [...sectors]
+    .filter((s) => activeSector == null || s.id === activeSector)
+    .sort((a, b) => a.sort_order - b.sort_order);
   const sortedCats = [...categories].sort((a, b) => a.sort_order - b.sort_order);
 
-  // 找未被任何分类覆盖的 tracked 标的
+  // 当前赛道下涉及的所有 tracked 标的（用于"未分类"判定 + 默认选中）
+  const symsInActiveSector = new Set<string>();
+  if (activeSector != null) {
+    const catIdsInSector = new Set(categories.filter((c) => c.sector_id === activeSector).map((c) => c.id));
+    for (const t of tickers) {
+      if (t.category_id != null && catIdsInSector.has(t.category_id) && trackedSet.has(t.symbol)) {
+        symsInActiveSector.add(t.symbol);
+      }
+    }
+  }
+
+  // 找未被任何分类覆盖的 tracked 标的（仅在显示全部时才显示"未分类"）
   const coveredSet = new Set<string>();
   for (const [sym, cats] of symToCats) if (cats.size > 0) coveredSet.add(sym);
-  const orphans = summaries.filter((s) => !coveredSet.has(s.symbol));
+  const orphans = activeSector == null
+    ? summaries.filter((s) => !coveredSet.has(s.symbol))
+    : [];
+
+  // 当 activeSector 切换时，如果当前 activeSym 不在该赛道里，自动选第一个
+  useEffect(() => {
+    if (activeSector == null) return;
+    if (activeSym && symsInActiveSector.has(activeSym)) return;
+    const first = Array.from(symsInActiveSector)[0];
+    if (first) setActiveSym(first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSector, summaries.length, tickers.length]);
 
   return (
     <div style={{
@@ -500,15 +524,19 @@ export default function RecentJobsCard() {
           📋 招聘动态分析
         </h3>
         <span style={{ fontSize: 11, color: "#64748b" }}>
-          按一级赛道分组 · 每日自动同步 · 共 {summaries.length} 个标的
+          {activeSector == null
+            ? `每日自动同步 · 共 ${summaries.length} 个标的`
+            : `当前赛道 · ${symsInActiveSector.size} 个有招聘数据`}
         </span>
       </div>
 
       {loading ? (
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>加载中…</div>
       ) : summaries.length === 0 ? (
+        <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>暂无数据。</div>
+      ) : activeSector != null && symsInActiveSector.size === 0 ? (
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>
-          暂无数据。
+          当前赛道下没有正在追踪招聘数据的标的。
         </div>
       ) : (
         <>

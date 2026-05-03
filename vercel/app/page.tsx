@@ -427,7 +427,7 @@ export default function Page() {
             )}
 
             {/* 主表格下方的招聘动态卡片 */}
-            <RecentJobsCard />
+            <RecentJobsCard activeSector={activeSector === ALL_KEY ? null : activeSector} />
           </div>
         </div>
       </div>
