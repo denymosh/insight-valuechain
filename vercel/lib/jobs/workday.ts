@@ -75,7 +75,11 @@ export async function fetchMultiWorkdaySummary(
     addAll(by_country, r.by_country);
     addAll(by_title,   r.by_title);
   }
-  return { symbol, total, posted_7d, posted_30d, by_dept, by_country, by_title };
+  // careers_url 用第一个 site
+  return {
+    symbol, total, posted_7d, posted_30d, by_dept, by_country, by_title,
+    careers_url: configs[0]?.publicBase,
+  };
 }
 
 export async function fetchWorkdaySummary(
@@ -149,5 +153,6 @@ export async function fetchWorkdaySummary(
     by_dept,
     by_country,
     by_title,
+    careers_url: cfg.publicBase,
   };
 }

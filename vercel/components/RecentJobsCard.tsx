@@ -10,8 +10,13 @@ type JobSummary = {
   by_country: Record<string, number>;
   by_title: Record<string, number>;
   by_keyword?: Record<string, number> | null;
+  careers_url?: string | null;
   fetched_at: string;
 };
+
+type Sector   = { id: number; name: string; sort_order: number };
+type Category = { id: number; sector_id: number; name: string; sort_order: number };
+type Ticker   = { symbol: string; category_id: number | null };
 
 // 低成本研发地区（用于"注意"信号）
 const LOW_COST_COUNTRIES = ["India", "Poland", "Portugal", "Romania", "Hungary", "Mexico", "Vietnam", "Philippines"];
@@ -330,79 +335,100 @@ function Section({ title, color, lines }: { title: string; color: string; lines:
   );
 }
 
-// 标的 → 行业分类映射
-type Category = {
-  label: string;
-  emoji: string;
-  symbols: string[];
+// 一级赛道图标映射
+const SECTOR_EMOJI: Record<string, string> = {
+  "人工智能": "🤖",
+  "太空经济": "🚀",
+  "国防军工": "🛡️",
+  "硅光子与共封装光学CPO供应链": "💎",
 };
 
-const CATEGORIES: Category[] = [
-  { emoji: "🔬", label: "半导体", symbols: ["NVDA", "MU", "AVGO", "ADI", "INTC", "MRVL", "MCHP", "GFS", "STM"] },
-  { emoji: "🌐", label: "网络/通信", symbols: ["NOK", "CSCO", "CIEN", "VIAV", "LITE"] },
-  { emoji: "🛰️", label: "防务/航天", symbols: ["NOC", "AVAV", "TDY", "RKLB", "ACHR", "PL"] },
-  { emoji: "📐", label: "测试量测", symbols: ["FORM", "ONTO", "TTMI"] },
-  { emoji: "🔋", label: "能源工业", symbols: ["GEV", "BE", "TLN", "APD"] },
-  { emoji: "🧪", label: "材料 / 模拟", symbols: ["HXL", "MTRN", "SMTC", "ALAB"] },
-  { emoji: "💻", label: "计算/软件", symbols: ["DELL", "BB", "JBL"] },
-];
+/** Strip parenthetical English suffix in category name like "光源 (CW DFB Lasers - ...)". */
+function shortCatName(name: string): string {
+  return name.replace(/\s*[（(].*?[)）]\s*/g, "").trim();
+}
+
+function TickerChip({
+  s, active, onPick,
+}: {
+  s: JobSummary; active: boolean; onPick: (sym: string) => void;
+}) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "stretch", gap: 0, lineHeight: 1.4 }}>
+      <button
+        onClick={() => onPick(s.symbol)}
+        title={`${s.symbol}: ${s.total} jobs · 7d +${s.posted_7d} · 30d +${s.posted_30d}`}
+        style={{
+          fontSize: 10.5, fontWeight: 700,
+          padding: "2px 7px",
+          borderRadius: s.careers_url ? "4px 0 0 4px" : 4,
+          borderRight: s.careers_url ? "none" : undefined,
+          border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
+          background: active ? "rgba(96,165,250,0.20)" : "rgba(51,65,85,0.20)",
+          color: active ? "#93c5fd" : "#cbd5e1",
+          cursor: "pointer",
+        }}
+      >
+        {s.symbol}
+        <span style={{ opacity: 0.55, fontWeight: 500, marginLeft: 4 }}>{s.total}</span>
+      </button>
+      {s.careers_url && (
+        <a
+          href={s.careers_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={`打开 ${s.symbol} 招聘页面`}
+          style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            padding: "0 5px",
+            fontSize: 10,
+            border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
+            borderLeft: "none",
+            borderRadius: "0 4px 4px 0",
+            background: active ? "rgba(96,165,250,0.10)" : "rgba(51,65,85,0.10)",
+            color: active ? "#93c5fd" : "#94a3b8",
+            textDecoration: "none",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#60a5fa"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = active ? "#93c5fd" : "#94a3b8"; }}
+        >↗</a>
+      )}
+    </span>
+  );
+}
 
 function CategoryMiniCard({
-  cat, summaries, activeSym, onPick,
+  catName, summaries, activeSym, onPick,
 }: {
-  cat: Category;
+  catName: string;
   summaries: JobSummary[];
   activeSym: string | null;
   onPick: (sym: string) => void;
 }) {
-  const map = new Map(summaries.map((s) => [s.symbol, s]));
-  const items = cat.symbols.map((sym) => map.get(sym)).filter((s): s is JobSummary => !!s);
-  if (items.length === 0) return null;
-  const total = items.reduce((sum, s) => sum + s.total, 0);
-
+  if (summaries.length === 0) return null;
+  const total = summaries.reduce((sum, s) => sum + s.total, 0);
   return (
     <div style={{
-      flex: "1 1 200px",
-      minWidth: 180,
+      flex: "1 1 180px",
+      minWidth: 170,
       maxWidth: 280,
       background: "rgba(15,23,42,0.45)",
       border: "1px solid rgba(51,65,85,0.5)",
       borderRadius: 7,
-      padding: "8px 10px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 6,
+      padding: "7px 9px",
+      display: "flex", flexDirection: "column", gap: 5,
     }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1" }}>
-          {cat.emoji} {cat.label}
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: "#cbd5e1" }} title={catName}>
+          {shortCatName(catName)}
         </span>
         <span style={{ fontSize: 10, color: "#64748b" }}>{total.toLocaleString()}</span>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {items.map((s) => {
-          const active = s.symbol === activeSym;
-          return (
-            <button
-              key={s.symbol}
-              onClick={() => onPick(s.symbol)}
-              title={`${s.symbol}: ${s.total} jobs · 7d +${s.posted_7d} · 30d +${s.posted_30d}`}
-              style={{
-                fontSize: 10.5, fontWeight: 700,
-                padding: "2px 7px",
-                borderRadius: 4,
-                border: `1px solid ${active ? "rgba(96,165,250,0.55)" : "rgba(51,65,85,0.55)"}`,
-                background: active ? "rgba(96,165,250,0.20)" : "rgba(51,65,85,0.20)",
-                color: active ? "#93c5fd" : "#cbd5e1",
-                cursor: "pointer",
-                lineHeight: 1.4,
-              }}
-            >
-              {s.symbol}
-              <span style={{ opacity: 0.55, fontWeight: 500, marginLeft: 4 }}>{s.total}</span>
-            </button>
-          );
-        })}
+        {summaries.map((s) => (
+          <TickerChip key={s.symbol} s={s} active={s.symbol === activeSym} onPick={onPick} />
+        ))}
       </div>
     </div>
   );
@@ -410,19 +436,27 @@ function CategoryMiniCard({
 
 export default function RecentJobsCard() {
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
+  const [sectors, setSectors] = useState<Sector[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tickers, setTickers] = useState<Ticker[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSym, setActiveSym] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/jobs")
-      .then((r) => r.json())
-      .then((d) => {
+    Promise.all([
+      fetch("/api/jobs").then((r) => r.json()),
+      fetch("/api/snapshot").then((r) => r.json()),
+    ])
+      .then(([jobsData, snapData]) => {
         if (cancelled) return;
-        const active: JobSummary[] = (d.summaries ?? []).filter(
+        const active: JobSummary[] = (jobsData.summaries ?? []).filter(
           (s: JobSummary) => (s.total ?? 0) > 0
         );
         setSummaries(active);
+        setSectors(snapData.sectors ?? []);
+        setCategories(snapData.categories ?? []);
+        setTickers(snapData.tickers ?? []);
         if (active.length > 0) setActiveSym(active[0].symbol);
         setLoading(false);
       })
@@ -432,12 +466,25 @@ export default function RecentJobsCard() {
 
   const current = summaries.find((s) => s.symbol === activeSym) ?? null;
 
-  // 没匹配到任何分类的标的 → 归入"其他"
-  const knownSet = new Set(CATEGORIES.flatMap((c) => c.symbols));
-  const others = summaries.filter((s) => !knownSet.has(s.symbol));
-  const cats: Category[] = others.length
-    ? [...CATEGORIES, { emoji: "📦", label: "其他", symbols: others.map((s) => s.symbol) }]
-    : CATEGORIES;
+  // 构建：sector -> category -> [JobSummary]（按用户的真实赛道层级）
+  const trackedSet = new Set(summaries.map((s) => s.symbol));
+  const summaryBySym = new Map(summaries.map((s) => [s.symbol, s]));
+  // ticker.symbol -> 它出现的所有 category_id
+  const symToCats = new Map<string, Set<number>>();
+  for (const t of tickers) {
+    if (!trackedSet.has(t.symbol) || t.category_id == null) continue;
+    if (!symToCats.has(t.symbol)) symToCats.set(t.symbol, new Set());
+    symToCats.get(t.symbol)!.add(t.category_id);
+  }
+
+  // 按 sector 分组
+  const sortedSectors = [...sectors].sort((a, b) => a.sort_order - b.sort_order);
+  const sortedCats = [...categories].sort((a, b) => a.sort_order - b.sort_order);
+
+  // 找未被任何分类覆盖的 tracked 标的
+  const coveredSet = new Set<string>();
+  for (const [sym, cats] of symToCats) if (cats.size > 0) coveredSet.add(sym);
+  const orphans = summaries.filter((s) => !coveredSet.has(s.symbol));
 
   return (
     <div style={{
@@ -453,7 +500,7 @@ export default function RecentJobsCard() {
           📋 招聘动态分析
         </h3>
         <span style={{ fontSize: 11, color: "#64748b" }}>
-          基于公开招聘数据，每日自动同步 · 共 {summaries.length} 个标的
+          按一级赛道分组 · 每日自动同步 · 共 {summaries.length} 个标的
         </span>
       </div>
 
@@ -461,27 +508,71 @@ export default function RecentJobsCard() {
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>加载中…</div>
       ) : summaries.length === 0 ? (
         <div style={{ color: "#64748b", fontSize: 12, padding: "20px 0" }}>
-          暂无数据，请运行 /api/cron/refresh-jobs 触发首次抓取。
+          暂无数据。
         </div>
       ) : (
         <>
-          {/* 分类小卡片，一行排开（自动换行） */}
-          <div style={{
-            display: "flex", flexWrap: "wrap", gap: 8,
-            marginBottom: 14,
-          }}>
-            {cats.map((cat) => (
-              <CategoryMiniCard
-                key={cat.label}
-                cat={cat}
-                summaries={summaries}
-                activeSym={activeSym}
-                onPick={setActiveSym}
-              />
-            ))}
-          </div>
+          {sortedSectors.map((sector) => {
+            const catsInSector = sortedCats.filter((c) => c.sector_id === sector.id);
+            // 每个 category 收集 tracked summaries
+            const catGroups = catsInSector
+              .map((cat) => {
+                const syms = tickers
+                  .filter((t) => t.category_id === cat.id && trackedSet.has(t.symbol))
+                  .map((t) => summaryBySym.get(t.symbol)!)
+                  .filter((s, i, arr) => s && arr.indexOf(s) === i); // dedupe
+                return { cat, syms };
+              })
+              .filter((g) => g.syms.length > 0);
+            if (catGroups.length === 0) return null;
+            const sectorTotal = catGroups.reduce(
+              (sum, g) => sum + g.syms.reduce((s, x) => s + x.total, 0), 0
+            );
+            return (
+              <div key={sector.id} style={{ marginBottom: 14 }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: "#94a3b8",
+                  marginBottom: 6,
+                  display: "flex", alignItems: "baseline", gap: 8,
+                }}>
+                  <span style={{ color: "#e2e8f0" }}>
+                    {SECTOR_EMOJI[sector.name] ?? "📂"} {sector.name}
+                  </span>
+                  <span style={{ color: "#64748b", fontWeight: 500 }}>
+                    {sectorTotal.toLocaleString()} jobs
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {catGroups.map(({ cat, syms }) => (
+                    <CategoryMiniCard
+                      key={cat.id}
+                      catName={cat.name}
+                      summaries={syms}
+                      activeSym={activeSym}
+                      onPick={setActiveSym}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
 
-          {/* 当前选中标的的详细分析 */}
+          {orphans.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>
+                📦 未分类
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                <CategoryMiniCard
+                  catName="未归入赛道"
+                  summaries={orphans}
+                  activeSym={activeSym}
+                  onPick={setActiveSym}
+                />
+              </div>
+            </div>
+          )}
+
           {current && <SummaryCard s={current} />}
         </>
       )}

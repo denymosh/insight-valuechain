@@ -12,6 +12,8 @@ export type JobSummary = {
   by_title: Record<string, number>;
   /** Optional: hits of tracked product keywords in job titles (e.g. {"Neutron": 14, "Electron": 8}) */
   by_keyword?: Record<string, number>;
+  /** Public-facing careers page URL (deep link to ATS for users to browse jobs) */
+  careers_url?: string;
 };
 
 export type OracleHcmConfig = {
@@ -65,6 +67,7 @@ export async function fetchOracleHcmSummary(
     return out;
   };
 
+  const lang = cfg.langPath ?? "en";
   return {
     symbol,
     total,
@@ -73,5 +76,6 @@ export async function fetchOracleHcmSummary(
     by_dept: facetToMap(meta.categoriesFacet),
     by_country: facetToMap(meta.locationsFacet),
     by_title: facetToMap(meta.titlesFacet),
+    careers_url: `https://${cfg.publicDomain}/${lang}/sites/${cfg.siteNumber}/jobs`,
   };
 }

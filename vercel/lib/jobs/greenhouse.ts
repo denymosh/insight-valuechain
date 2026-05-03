@@ -132,5 +132,6 @@ export async function fetchGreenhouseSummary(
     by_country,
     by_title,
     by_keyword: Object.keys(by_keyword).length > 0 ? by_keyword : undefined,
+    careers_url: `https://job-boards.greenhouse.io/${encodeURIComponent(cfg.boardToken)}`,
   };
 }

@@ -66,5 +66,6 @@ export async function fetchEightfoldSummary(
     by_dept,
     by_country,
     by_title,
+    careers_url: `https://${cfg.tenant}.eightfold.ai/careers`,
   };
 }

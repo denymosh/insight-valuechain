@@ -58,6 +58,7 @@ export async function GET(req: Request) {
         by_country: s.by_country,
         by_title: s.by_title,
         by_keyword: s.by_keyword ?? null,
+        careers_url: s.careers_url ?? null,
         fetched_at: new Date().toISOString(),
       },
       { onConflict: "symbol" }
