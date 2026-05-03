@@ -73,28 +73,44 @@ function inferRoleFromTitle(title: string): string {
 }
 
 /** Fallback: paginate all requisitions and bucket by title-inferred role.
- *  Used when categoriesFacet is empty (e.g. Coherent's Oracle tenant). */
+ *  Used when categoriesFacet is empty (e.g. Coherent's Oracle tenant).
+ *  Dedupes by Id to handle Oracle tenants that ignore offset (return same page each time). */
 async function bucketByTitle(cfg: OracleHcmConfig, totalKnown: number): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
+  const seenIds = new Set<string>();
   let offset = 0;
   const MAX_ITER = 60; // 60 * 25 = 1500 jobs max
+  let lastNewIds = -1;
   for (let iter = 0; iter < MAX_ITER; iter++) {
+    // Try offset both inside finder AND as top-level (different Oracle tenants accept different formats)
     const url =
       `https://${cfg.host}/hcmRestApi/resources/latest/recruitingCEJobRequisitions` +
       `?onlyData=true&expand=requisitionList` +
-      `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)}` +
+      `&finder=findReqs;siteNumber=${encodeURIComponent(cfg.siteNumber)},offset=${offset}` +
       `&offset=${offset}`;
     const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
     if (!res.ok) break;
     const json = await res.json();
     const items: any[] = json?.items?.[0]?.requisitionList ?? [];
     if (items.length === 0) break;
+
+    let newCount = 0;
     for (const it of items) {
+      const id = String(it.Id ?? "");
+      if (!id || seenIds.has(id)) continue;
+      seenIds.add(id);
+      newCount++;
       const role = inferRoleFromTitle(String(it.Title ?? ""));
       out[role] = (out[role] ?? 0) + 1;
     }
+
+    // Stop if no new IDs this round (offset isn't being honored — or all done)
+    if (newCount === 0) break;
+    if (newCount === lastNewIds && lastNewIds < items.length) break;
+    lastNewIds = newCount;
+
     offset += items.length;
-    if (offset >= totalKnown) break;
+    if (seenIds.size >= totalKnown) break;
   }
   return out;
 }
