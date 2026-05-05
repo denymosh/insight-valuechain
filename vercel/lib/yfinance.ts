@@ -154,9 +154,11 @@ export async function fetchLiveQuote(
   symbol: string
 ): Promise<{ last: number | null; prev_close: number | null }> {
   try {
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    // Use range=10d so we have enough daily bars to derive an accurate prev_close
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=10d`;
     const json = await yfFetch(url);
-    const meta = json?.chart?.result?.[0]?.meta ?? {};
+    const result = json?.chart?.result?.[0];
+    const meta = result?.meta ?? {};
     const state: string = meta.marketState ?? "";
     const regular = numOrNull(meta.regularMarketPrice ?? meta.chartPreviousClose);
     // During pre/post-market show extended-hours price when available
@@ -166,10 +168,43 @@ export async function fetchLiveQuote(
     } else if ((state === "POST" || state === "POSTPOST") && meta.postMarketPrice) {
       last = numOrNull(meta.postMarketPrice) ?? regular;
     }
-    return {
-      last,
-      prev_close: numOrNull(meta.previousClose ?? meta.chartPreviousClose),
-    };
+
+    // Derive prev_close from the daily bars (most reliable).
+    // meta.previousClose for chart endpoints is the close BEFORE the requested range,
+    // which is wrong (it's 10+ days ago for a range=10d query).
+    const closesRaw: any[] = result?.indicators?.quote?.[0]?.close ?? [];
+    const timestampsRaw: any[] = result?.timestamp ?? [];
+    // Pair closes with timestamps and filter non-null
+    const dailyBars: { t: number; c: number }[] = [];
+    for (let i = 0; i < closesRaw.length; i++) {
+      const c = Number(closesRaw[i]);
+      const t = Number(timestampsRaw[i]);
+      if (Number.isFinite(c) && c > 0 && Number.isFinite(t)) dailyBars.push({ t, c });
+    }
+
+    let prev_close: number | null = null;
+    if (dailyBars.length >= 2) {
+      // The last bar is "today" if its timestamp falls within today's calendar day in ET.
+      // If so, prev_close = 2nd-to-last close. Otherwise prev_close = last close (today is non-trading).
+      const lastBar = dailyBars[dailyBars.length - 1];
+      const todayET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const lastBarET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(lastBar.t * 1000));
+      if (todayET === lastBarET) {
+        // Last bar is today's running close → prev_close is the bar before it
+        prev_close = dailyBars[dailyBars.length - 2].c;
+      } else {
+        // Last bar is from the most recent past trading day → that's our prev_close
+        // (last/current price is the same as that close, change should be 0)
+        prev_close = lastBar.c;
+      }
+    } else if (dailyBars.length === 1) {
+      prev_close = dailyBars[0].c;
+    } else {
+      // Fallback to meta if no bars (rare)
+      prev_close = numOrNull(meta.previousClose);
+    }
+
+    return { last, prev_close };
   } catch {
     return { last: null, prev_close: null };
   }
