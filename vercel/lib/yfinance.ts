@@ -182,21 +182,15 @@ export async function fetchLiveQuote(
       if (Number.isFinite(c) && c > 0 && Number.isFinite(t)) dailyBars.push({ t, c });
     }
 
+    // prev_close = 2nd-to-last close (i.e. trading day before the most recent one).
+    // Works for all market states:
+    //  • Market open: closes[-1] = today running, closes[-2] = yesterday close ✓
+    //  • After-hours: closes[-1] = today final, closes[-2] = yesterday close ✓
+    //  • Weekend/holiday: closes[-1] = Friday close, closes[-2] = Thursday close
+    //    → change reflects Friday's move (what users expect) ✓
     let prev_close: number | null = null;
     if (dailyBars.length >= 2) {
-      // The last bar is "today" if its timestamp falls within today's calendar day in ET.
-      // If so, prev_close = 2nd-to-last close. Otherwise prev_close = last close (today is non-trading).
-      const lastBar = dailyBars[dailyBars.length - 1];
-      const todayET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-      const lastBarET = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(lastBar.t * 1000));
-      if (todayET === lastBarET) {
-        // Last bar is today's running close → prev_close is the bar before it
-        prev_close = dailyBars[dailyBars.length - 2].c;
-      } else {
-        // Last bar is from the most recent past trading day → that's our prev_close
-        // (last/current price is the same as that close, change should be 0)
-        prev_close = lastBar.c;
-      }
+      prev_close = dailyBars[dailyBars.length - 2].c;
     } else if (dailyBars.length === 1) {
       prev_close = dailyBars[0].c;
     } else {
