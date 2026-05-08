@@ -209,19 +209,36 @@ const SparklineCell = (p: any) => {
 };
 
 // IV percentile badge — blue (low) → green → yellow → orange → red (high)
-// IV / Rank cell — top: IV Rank badge (大), bottom: IV value (小)
+// IV / Rank cell — top: IV Rank badge (大), bottom: IV value as link to Barchart (小)
 const IvPctCell = (p: any) => {
   const rank = p.value;                  // iv_rank (0–100), 主显示
   const iv   = p.data?.quote?.iv;        // 当前 IV (%)
   const pct  = p.data?.quote?.iv_pct;    // IV Percentile (tooltip 用)
+  const sym  = p.data?.symbol;
+  // Barchart 期权概览页 — IV / IV Rank / IV Percentile 数据源
+  const ivUrl = sym ? `https://www.barchart.com/stocks/quotes/${encodeURIComponent(sym)}/options` : null;
+
+  const ivLink = (text: string, color = "#64748b") => ivUrl ? (
+    <a
+      href={ivUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title={`在 Barchart 查看 ${sym} IV 数据`}
+      style={{ color, textDecoration: "none" }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = "#60a5fa"; (e.currentTarget as HTMLAnchorElement).style.textDecoration = "underline"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = color; (e.currentTarget as HTMLAnchorElement).style.textDecoration = "none"; }}
+    >{text}</a>
+  ) : <span style={{ color }}>{text}</span>;
+
   if (rank == null && iv == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
-  // 没 rank 但有 iv — 只显示 iv
+  // 没 rank 但有 iv — 只显示 iv (with link)
   if (rank == null) {
     return (
       <div style={cellCenter}>
         <div style={{ textAlign: "center", lineHeight: 1.2 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>—</div>
-          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>IV {num(iv, 1)}%</div>
+          <div style={{ fontSize: 10, marginTop: 2 }}>{ivLink(`IV ${num(iv, 1)}% ↗`)}</div>
         </div>
       </div>
     );
@@ -234,7 +251,8 @@ const IvPctCell = (p: any) => {
   else if (rank >= 20) { fg = "#86efac"; bg = "rgba(34,197,94,0.10)";  bd = "rgba(34,197,94,0.30)"; }
   const tip = `IV Rank: ${num(rank, 0)}（52 周内当前 IV 排名）` +
               (pct != null ? `\nIV Percentile: ${num(pct, 0)}%` : "") +
-              (iv  != null ? `\n当前 IV: ${num(iv, 1)}%` : "");
+              (iv  != null ? `\n当前 IV: ${num(iv, 1)}%` : "") +
+              `\n点击 IV 数值在 Barchart 查看详情`;
   return (
     <div style={cellCenter}>
       <div style={{ textAlign: "center", lineHeight: 1.2 }}>
@@ -252,8 +270,8 @@ const IvPctCell = (p: any) => {
           {num(rank, 0)}
         </span>
         {iv != null && (
-          <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>
-            IV {num(iv, 1)}%
+          <div style={{ fontSize: 10, marginTop: 3 }}>
+            {ivLink(`IV ${num(iv, 1)}% ↗`)}
           </div>
         )}
       </div>
