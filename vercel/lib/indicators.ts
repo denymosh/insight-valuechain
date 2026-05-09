@@ -86,6 +86,8 @@ export type Snapshot = Partial<{
   ema10_m: number;
   ema20_m: number;
   m_state: boolean;
+  /** 过去 6 个月月度收益率的算术平均（%）—— 6-month momentum factor */
+  mom_6m_avg: number;
 }>;
 
 export function computeSnapshot(daily: Bar[], weekly: Bar[], monthly: Bar[]): Snapshot {
@@ -138,6 +140,21 @@ export function computeSnapshot(daily: Bar[], weekly: Bar[], monthly: Bar[]): Sn
       out.ema10_m = e10;
       out.ema20_m = e20;
       out.m_state = mc[mc.length - 1] > e10 && e10 > e20;
+    }
+    // 6-month average momentum: arithmetic mean of last 6 monthly returns (%).
+    // Need 7 closes to compute 6 monthly returns.
+    if (mc.length >= 7) {
+      const last7 = mc.slice(-7);
+      let sum = 0;
+      let n = 0;
+      for (let i = 1; i < last7.length; i++) {
+        const prev = last7[i - 1];
+        if (prev > 0) {
+          sum += ((last7[i] - prev) / prev) * 100;
+          n++;
+        }
+      }
+      if (n > 0) out.mom_6m_avg = sum / n;
     }
   }
   return out;

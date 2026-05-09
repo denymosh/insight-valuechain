@@ -382,6 +382,35 @@ const PeCell = (p: any) => {
 const PsCell = PlainCell((v) => num(v, 2));
 const PctNeutralCell = PlainCell((v) => (v == null ? "—" : `${num(v, 1)}%`));
 
+// 6 个月月均动量：分级配色 + tooltip
+const Mom6mCell = (p: any) => {
+  const v = p.value;
+  if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  // 分级：>3% 强势绿 / 1–3% 正常绿 / -1–1% 灰 / -3 ~ -1 弱橙 / <-3 红
+  let fg = "#cbd5e1", bg = "transparent", bd = "transparent";
+  if      (v >= 5)  { fg = "#86efac"; bg = "rgba(34,197,94,0.18)";   bd = "rgba(34,197,94,0.55)"; }
+  else if (v >= 2)  { fg = "#86efac"; bg = "rgba(34,197,94,0.10)";   bd = "rgba(34,197,94,0.32)"; }
+  else if (v >= 0)  { fg = "#cbd5e1"; }
+  else if (v >= -2) { fg = "#fdba74"; bg = "rgba(251,146,60,0.10)";  bd = "rgba(251,146,60,0.32)"; }
+  else if (v >= -5) { fg = "#fdba74"; bg = "rgba(251,146,60,0.18)";  bd = "rgba(251,146,60,0.55)"; }
+  else              { fg = "#fca5a5"; bg = "rgba(239,68,68,0.18)";   bd = "rgba(239,68,68,0.55)"; }
+  return (
+    <div style={cellCenter}>
+      <span
+        style={{
+          fontSize: 13, fontWeight: 700, color: fg,
+          background: bg, border: bd === "transparent" ? "none" : `1px solid ${bd}`,
+          padding: "2px 8px", borderRadius: 5,
+          fontVariantNumeric: "tabular-nums",
+        }}
+        title="过去 6 个月每月收益率的算术平均（动量因子）"
+      >
+        {v >= 0 ? "+" : ""}{num(v, 1)}%
+      </span>
+    </div>
+  );
+};
+
 const FromHighCell = (p: any) => {
   const q = p.data?.quote;
   const hi = q?.high_52w;
@@ -695,6 +724,8 @@ export default function CategoryGrid({
         valueGetter: (p) => p.data?.quote?.return_20d ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "YTD%", colId: "retYtd", width: 80, cellRenderer: PctCell,
         valueGetter: (p) => p.data?.quote?.return_ytd ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
+      { headerName: "6M均动量", colId: "mom6m", width: 88, cellRenderer: Mom6mCell,
+        valueGetter: (p) => p.data?.quote?.mom_6m_avg ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "距高点", colId: "fromHi", width: 85, cellRenderer: FromHighCell,
         valueGetter: (p) => {
           const q = p.data?.quote;
