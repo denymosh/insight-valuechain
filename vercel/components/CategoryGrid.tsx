@@ -382,18 +382,55 @@ const PeCell = (p: any) => {
 const PsCell = PlainCell((v) => num(v, 2));
 const PctNeutralCell = PlainCell((v) => (v == null ? "—" : `${num(v, 1)}%`));
 
-// 6 个月月均动量：分级配色 + tooltip
-const Mom6mCell = (p: any) => {
+// 通用动量分级配色（不同阈值的版本）
+function momTint(v: number, thresholds = { strong: 5, mid: 2 }) {
+  let fg = "#cbd5e1", bg = "transparent", bd = "transparent";
+  if      (v >=  thresholds.strong) { fg = "#86efac"; bg = "rgba(34,197,94,0.18)";  bd = "rgba(34,197,94,0.55)"; }
+  else if (v >=  thresholds.mid)    { fg = "#86efac"; bg = "rgba(34,197,94,0.10)";  bd = "rgba(34,197,94,0.32)"; }
+  else if (v >=  0)                 { fg = "#cbd5e1"; }
+  else if (v >= -thresholds.mid)    { fg = "#fdba74"; bg = "rgba(251,146,60,0.10)"; bd = "rgba(251,146,60,0.32)"; }
+  else if (v >= -thresholds.strong) { fg = "#fdba74"; bg = "rgba(251,146,60,0.18)"; bd = "rgba(251,146,60,0.55)"; }
+  else                              { fg = "#fca5a5"; bg = "rgba(239,68,68,0.18)";  bd = "rgba(239,68,68,0.55)"; }
+  return { fg, bg, bd };
+}
+
+const MomBadge = (v: number | null, tip: string, thresholds?: { strong: number; mid: number }) => {
+  if (v == null) return <span style={{ color: "#475569" }}>—</span>;
+  const { fg, bg, bd } = momTint(v, thresholds);
+  return (
+    <span
+      style={{
+        fontSize: 13, fontWeight: 700, color: fg,
+        background: bg, border: bd === "transparent" ? "none" : `1px solid ${bd}`,
+        padding: "2px 8px", borderRadius: 5,
+        fontVariantNumeric: "tabular-nums",
+      }}
+      title={tip}
+    >
+      {v >= 0 ? "+" : ""}{num(v, 1)}%
+    </span>
+  );
+};
+
+// 6 个月月均动量
+const Mom6mCell = (p: any) => (
+  <div style={cellCenter}>
+    {MomBadge(p.value, "过去 6 个月每月收益率的算术平均")}
+  </div>
+);
+
+// 12M-1 标准动量（Jegadeesh-Titman）
+const Mom12m1Cell = (p: any) => (
+  <div style={cellCenter}>
+    {MomBadge(p.value, "12M-1 动量：从 13 个月前到 1 个月前的累积收益（学术标准，跳过最近 1 月避免反转效应）", { strong: 30, mid: 10 })}
+  </div>
+);
+
+// 相对 SPY 6M 动量
+const RelMom6mCell = (p: any) => {
   const v = p.value;
   if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
-  // 分级：>3% 强势绿 / 1–3% 正常绿 / -1–1% 灰 / -3 ~ -1 弱橙 / <-3 红
-  let fg = "#cbd5e1", bg = "transparent", bd = "transparent";
-  if      (v >= 5)  { fg = "#86efac"; bg = "rgba(34,197,94,0.18)";   bd = "rgba(34,197,94,0.55)"; }
-  else if (v >= 2)  { fg = "#86efac"; bg = "rgba(34,197,94,0.10)";   bd = "rgba(34,197,94,0.32)"; }
-  else if (v >= 0)  { fg = "#cbd5e1"; }
-  else if (v >= -2) { fg = "#fdba74"; bg = "rgba(251,146,60,0.10)";  bd = "rgba(251,146,60,0.32)"; }
-  else if (v >= -5) { fg = "#fdba74"; bg = "rgba(251,146,60,0.18)";  bd = "rgba(251,146,60,0.55)"; }
-  else              { fg = "#fca5a5"; bg = "rgba(239,68,68,0.18)";   bd = "rgba(239,68,68,0.55)"; }
+  const { fg, bg, bd } = momTint(v, { strong: 15, mid: 5 });
   return (
     <div style={cellCenter}>
       <span
@@ -403,7 +440,7 @@ const Mom6mCell = (p: any) => {
           padding: "2px 8px", borderRadius: 5,
           fontVariantNumeric: "tabular-nums",
         }}
-        title="过去 6 个月每月收益率的算术平均（动量因子）"
+        title="相对 SPY 的 6M 超额收益（标的 6M 收益 − SPY 6M 收益）"
       >
         {v >= 0 ? "+" : ""}{num(v, 1)}%
       </span>
@@ -724,8 +761,12 @@ export default function CategoryGrid({
         valueGetter: (p) => p.data?.quote?.return_20d ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "YTD%", colId: "retYtd", width: 80, cellRenderer: PctCell,
         valueGetter: (p) => p.data?.quote?.return_ytd ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "6M均动量", colId: "mom6m", width: 88, cellRenderer: Mom6mCell,
+      { headerName: "6M均动量", colId: "mom6m", width: 86, cellRenderer: Mom6mCell,
         valueGetter: (p) => p.data?.quote?.mom_6m_avg ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
+      { headerName: "12M-1动量", colId: "mom12m1", width: 92, cellRenderer: Mom12m1Cell,
+        valueGetter: (p) => p.data?.quote?.mom_12m1 ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
+      { headerName: "vs SPY", colId: "relmom", width: 82, cellRenderer: RelMom6mCell,
+        valueGetter: (p) => p.data?.quote?.rel_mom_6m ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "距高点", colId: "fromHi", width: 85, cellRenderer: FromHighCell,
         valueGetter: (p) => {
           const q = p.data?.quote;

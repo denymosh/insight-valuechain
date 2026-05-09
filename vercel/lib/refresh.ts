@@ -79,14 +79,29 @@ export async function refreshPriceOne(symbol: string): Promise<void> {
 
 /** Daily / slow loop: full bars → indicators, fundamentals, earnings. Run once/day. */
 /** Daily full refresh: bars + indicators + fundamentals + earnings.
- *  Runs in batches of 3 in parallel to fit inside 60s cron timeout. */
+ *  Fetches SPY's 6M return once first (for relative momentum baseline),
+ *  then runs symbols in batches of 3 in parallel. */
 export async function refreshDailyAll(): Promise<{ ok: number; fail: number }> {
+  // SPY 6M cumulative return (used as baseline for relative momentum)
+  let spy6m: number | null = null;
+  try {
+    const spyMonthly = await fetchMonthly("SPY");
+    if (spyMonthly.length >= 7) {
+      const closes = spyMonthly.map((b) => b.close);
+      const c0 = closes[closes.length - 7];
+      const cN = closes[closes.length - 1];
+      if (c0 > 0) spy6m = ((cN - c0) / c0) * 100;
+    }
+  } catch (e) {
+    console.warn("refreshDaily: failed to fetch SPY 6M return", e);
+  }
+
   const syms = await listSymbols();
   let ok = 0, fail = 0;
   const BATCH = 3;
   for (let i = 0; i < syms.length; i += BATCH) {
     const batch = syms.slice(i, i + BATCH);
-    const results = await Promise.allSettled(batch.map(refreshDailyOne));
+    const results = await Promise.allSettled(batch.map((s) => refreshDailyOne(s, spy6m)));
     for (const r of results) {
       if (r.status === "fulfilled") ok++;
       else { fail++; console.warn("refreshDaily batch error", r.reason); }
@@ -96,7 +111,7 @@ export async function refreshDailyAll(): Promise<{ ok: number; fail: number }> {
   return { ok, fail };
 }
 
-export async function refreshDailyOne(symbol: string): Promise<void> {
+export async function refreshDailyOne(symbol: string, spy6m: number | null = null): Promise<void> {
   symbol = symbol.toUpperCase();
   const [daily, weekly, monthly, fund, rawIV] = await Promise.all([
     fetchDaily(symbol),
@@ -122,6 +137,11 @@ export async function refreshDailyOne(symbol: string): Promise<void> {
     patch.last = session_close;
     patch.change = session_close - snap.prev_close;
     patch.change_pct = (patch.change / snap.prev_close) * 100;
+  }
+
+  // ── Relative momentum vs SPY (6-month) ──
+  if (snap.return_6m != null && spy6m != null) {
+    patch.rel_mom_6m = snap.return_6m - spy6m;
   }
 
   // ── IV: store today's reading and compute 1-year percentile ──

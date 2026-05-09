@@ -86,8 +86,12 @@ export type Snapshot = Partial<{
   ema10_m: number;
   ema20_m: number;
   m_state: boolean;
-  /** 过去 6 个月月度收益率的算术平均（%）—— 6-month momentum factor */
+  /** 过去 6 个月月度收益率的算术平均（%）—— simple 6-month momentum */
   mom_6m_avg: number;
+  /** 过去 6 个月累积收益（%）—— used for relative momentum calc */
+  return_6m: number;
+  /** 12M-1 动量（%）：从 13 个月前到 1 个月前的累积收益（学术标准 Jegadeesh-Titman） */
+  mom_12m1: number;
 }>;
 
 export function computeSnapshot(daily: Bar[], weekly: Bar[], monthly: Bar[]): Snapshot {
@@ -155,6 +159,19 @@ export function computeSnapshot(daily: Bar[], weekly: Bar[], monthly: Bar[]): Sn
         }
       }
       if (n > 0) out.mom_6m_avg = sum / n;
+
+      // 6-month cumulative return: (close_now - close_6m_ago) / close_6m_ago
+      const c0 = mc[mc.length - 7];
+      const cN = mc[mc.length - 1];
+      if (c0 > 0) out.return_6m = ((cN - c0) / c0) * 100;
+    }
+
+    // 12M-1 momentum (Jegadeesh-Titman): cumulative return from 13 months ago to 1 month ago.
+    // Skips the most recent month to avoid short-term reversal effect.
+    if (mc.length >= 14) {
+      const start = mc[mc.length - 14]; // 13 months ago
+      const end   = mc[mc.length - 2];  // 1 month ago
+      if (start > 0) out.mom_12m1 = ((end - start) / start) * 100;
     }
   }
   return out;
