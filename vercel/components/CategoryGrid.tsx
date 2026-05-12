@@ -372,7 +372,7 @@ function metricWithDot(text: string, tier: Tier, tip?: string) {
         {text}
       </span>
       <span style={{
-        width: 6, height: 6, borderRadius: "50%",
+        width: 9, height: 9, borderRadius: "50%",
         background: TIER_DOT_COLOR[tier],
         display: "inline-block",
       }} />
@@ -890,7 +890,7 @@ export default function CategoryGrid({
         valueGetter: (p) => p.data?.quote?.return_ytd ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "6M均动量", colId: "mom6m", width: 86, cellRenderer: Mom6mCell,
         valueGetter: (p) => p.data?.quote?.mom_6m_avg ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "12M-1动量", colId: "mom12m1", width: 92, cellRenderer: Mom12m1Cell,
+      { headerName: "12M-1动量", colId: "mom12m1", width: 92, cellRenderer: Mom12m1Cell, hide: true,
         valueGetter: (p) => p.data?.quote?.mom_12m1 ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "vs SPY", colId: "relmom", width: 82, cellRenderer: RelMom6mCell,
         valueGetter: (p) => p.data?.quote?.rel_mom_6m ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
