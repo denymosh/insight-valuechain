@@ -325,18 +325,26 @@ const mcapTierIdx = (v: number | null | undefined): number => {
   return 0;
 };
 
-// ── 阈值配色助手 ──────────────────────────────────────────────────────
+// ── 阈值分级助手 ──────────────────────────────────────────────────────
 // 5 个等级：极优 / 优秀 / 普通 / 关注 / 预警
+// 数字保持原色，下方用小圆点表示等级
 type Tier = "excellent" | "good" | "neutral" | "caution" | "warning";
-const TIER_STYLE: Record<Tier, { fg: string; bg: string; bd: string }> = {
-  excellent: { fg: "#86efac", bg: "rgba(34,197,94,0.20)",  bd: "rgba(34,197,94,0.55)" },
-  good:      { fg: "#86efac", bg: "rgba(34,197,94,0.10)",  bd: "rgba(34,197,94,0.30)" },
-  neutral:   { fg: "#cbd5e1", bg: "transparent",           bd: "transparent" },
-  caution:   { fg: "#fdba74", bg: "rgba(251,146,60,0.14)", bd: "rgba(251,146,60,0.45)" },
-  warning:   { fg: "#fca5a5", bg: "rgba(239,68,68,0.18)",  bd: "rgba(239,68,68,0.55)" },
+const TIER_DOT_COLOR: Record<Tier, string> = {
+  excellent: "#22c55e",   // 深绿
+  good:      "#86efac",   // 浅绿
+  neutral:   "#64748b",   // 灰
+  caution:   "#fb923c",   // 橙
+  warning:   "#ef4444",   // 红
+};
+const TIER_LABEL: Record<Tier, string> = {
+  excellent: "极优",
+  good:      "优秀",
+  neutral:   "中性",
+  caution:   "关注",
+  warning:   "预警",
 };
 
-// 数值越小越好（如 PE、PS）→ 阈值: excellent < good < caution < warning
+// 数值越小越好（PE、PS）
 function tierLowerBetter(v: number, t: { exc: number; good: number; caution: number; warning: number }): Tier {
   if (v <= t.exc) return "excellent";
   if (v <= t.good) return "good";
@@ -344,7 +352,7 @@ function tierLowerBetter(v: number, t: { exc: number; good: number; caution: num
   if (v <= t.warning) return "caution";
   return "warning";
 }
-// 数值越大越好（如 利润率、增长率）→ 阈值反向
+// 数值越大越好（利润率、增长率）
 function tierHigherBetter(v: number, t: { exc: number; good: number; caution: number; warning: number }): Tier {
   if (v >= t.exc) return "excellent";
   if (v >= t.good) return "good";
@@ -353,50 +361,56 @@ function tierHigherBetter(v: number, t: { exc: number; good: number; caution: nu
   return "warning";
 }
 
-function metricBadge(text: string, tier: Tier, tip?: string, fontSize = 13, fontWeight = 600) {
-  const s = TIER_STYLE[tier];
-  const isPlain = tier === "neutral";
+// 数字 + 下方小圆点
+function metricWithDot(text: string, tier: Tier, tip?: string) {
   return (
-    <span
-      style={{
-        display: "inline-block",
-        fontSize, fontWeight,
-        color: s.fg,
-        background: s.bg,
-        border: isPlain ? "none" : `1px solid ${s.bd}`,
-        padding: isPlain ? "0 4px" : "2px 7px",
-        borderRadius: 5,
-        fontVariantNumeric: "tabular-nums",
-      }}
-      title={tip}
+    <div
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, lineHeight: 1.1 }}
+      title={tip ? `${tip}\n等级: ${TIER_LABEL[tier]}` : `等级: ${TIER_LABEL[tier]}`}
     >
-      {text}
-    </span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", fontVariantNumeric: "tabular-nums" }}>
+        {text}
+      </span>
+      <span style={{
+        width: 6, height: 6, borderRadius: "50%",
+        background: TIER_DOT_COLOR[tier],
+        display: "inline-block",
+      }} />
+    </div>
   );
 }
 
-// Combined PE: ttm / fwd (with threshold tints — PE 越低越好)
+// Combined PE: ttm / fwd — 数字一行 + 下方两个对应的等级点
 // 阈值: ≤15=极优, ≤25=优, ≤50=普通, ≤80=关注, >80=预警
 const PeCombinedCell = (p: any) => {
   const q = p.data?.quote;
   const ttm = q?.pe_ttm;
   const fwd = q?.pe_fwd;
-  const tipPE = "PE TTM (历史) / PE Forward (前瞻)\n阈值: ≤15极优 · ≤25优 · ≤50中性 · ≤80关注 · >80预警\n负 PE = 公司亏损中";
-  const renderPE = (v: any) => {
-    if (v == null || v <= 0) {
-      // 负 PE = 亏损
-      return <span style={{ color: "#fca5a5", fontWeight: 600 }} title="亏损中">—</span>;
-    }
-    const tier = tierLowerBetter(v, { exc: 15, good: 25, caution: 50, warning: 80 });
-    const text = v >= 100 ? Number(v).toFixed(0) : Number(v).toFixed(1);
-    return metricBadge(text, tier, undefined, 13);
+  const tipPE = "PE TTM / PE Forward\n阈值: ≤15极优 · ≤25优 · ≤50中性 · ≤80关注 · >80预警\n负 PE = 公司亏损中";
+  const fmt = (v: any) => (v == null || v <= 0) ? "—" : (v >= 100 ? Number(v).toFixed(0) : Number(v).toFixed(1));
+  const dotColor = (v: any) => {
+    if (v == null || v <= 0) return TIER_DOT_COLOR.warning; // 亏损
+    return TIER_DOT_COLOR[tierLowerBetter(v, { exc: 15, good: 25, caution: 50, warning: 80 })];
   };
+  const Dot = ({ v }: { v: any }) => (
+    <span style={{
+      width: 6, height: 6, borderRadius: "50%",
+      background: dotColor(v),
+      display: "inline-block",
+    }} />
+  );
   return (
     <div style={cellCenter}>
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }} title={tipPE}>
-        {renderPE(ttm)}
-        <span style={{ color: "#475569", fontSize: 11 }}>/</span>
-        {renderPE(fwd)}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, lineHeight: 1.1 }} title={tipPE}>
+        <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ color: "#cbd5e1" }}>{fmt(ttm)}</span>
+          <span style={{ color: "#475569", margin: "0 4px" }}>/</span>
+          <span style={{ color: "#94a3b8" }}>{fmt(fwd)}</span>
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <Dot v={ttm} />
+          <Dot v={fwd} />
+        </div>
       </div>
     </div>
   );
@@ -441,64 +455,42 @@ const PsCell = (p: any) => {
   const v = p.value;
   if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
   const tier = tierLowerBetter(v, { exc: 3, good: 8, caution: 15, warning: 25 });
-  return (
-    <div style={cellCenter}>
-      {metricBadge(num(v, 2), tier, "市销率 (Price/Sales)\n阈值: ≤3极优 · ≤8优 · ≤15中性 · ≤25关注 · >25预警")}
-    </div>
-  );
+  return <div style={cellCenter}>{metricWithDot(num(v, 2), tier, "市销率 P/S\n阈值: ≤3极优 · ≤8优 · ≤15中性 · ≤25关注 · >25预警")}</div>;
 };
 
 const PctNeutralCell = PlainCell((v) => (v == null ? "—" : `${num(v, 1)}%`));
 
-// 营收 YoY: 越高越好。阈值: ≥40极优, ≥20优, ≥5中性, ≥0关注, <0预警(萎缩)
+// 营收 YoY: 越高越好。阈值: ≥40极优, ≥20优, ≥5中性, ≥0关注, <0预警
 const RevYoyCell = (p: any) => {
   const v = p.value;
   if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
   const tier = tierHigherBetter(v, { exc: 40, good: 20, caution: 5, warning: 0 });
-  return (
-    <div style={cellCenter}>
-      {metricBadge(`${v >= 0 ? "+" : ""}${num(v, 1)}%`, tier, "营收同比增长率\n阈值: ≥40%极优 · ≥20%优 · ≥5%中性 · ≥0%关注 · <0%预警(营收萎缩)")}
-    </div>
-  );
+  return <div style={cellCenter}>{metricWithDot(`${v >= 0 ? "+" : ""}${num(v, 1)}%`, tier, "营收同比增长率\n阈值: ≥40%极优 · ≥20%优 · ≥5%中性 · ≥0%关注 · <0%预警(营收萎缩)")}</div>;
 };
 
 // 预期增长 (EPS Fwd): 越高越好。阈值: ≥50极优, ≥20优, ≥5中性, ≥0关注, <0预警
-// (注：基数效应导致 >300% 时含义打折)
 const GrowthFwdCell = (p: any) => {
   const v = p.value;
   if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
   const tier = tierHigherBetter(v, { exc: 50, good: 20, caution: 5, warning: 0 });
-  // 显示超大值时缩写
   const text = Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k%` : `${v >= 0 ? "+" : ""}${num(v, 0)}%`;
-  return (
-    <div style={cellCenter}>
-      {metricBadge(text, tier, "预期 EPS 增长率\n阈值: ≥50%极优 · ≥20%优 · ≥5%中性 · ≥0%关注 · <0%预警\n注：>300%通常是低基数效应，需结合营收增长解读")}
-    </div>
-  );
+  return <div style={cellCenter}>{metricWithDot(text, tier, "预期 EPS 增长率\n阈值: ≥50%极优 · ≥20%优 · ≥5%中性 · ≥0%关注 · <0%预警\n注：>300%通常是低基数效应")}</div>;
 };
 
-// 毛利率: 越高越好。阈值: ≥60极优(软件/IP), ≥40优, ≥25中性, ≥15关注, <15预警
+// 毛利率: 越高越好。阈值: ≥60极优, ≥40优, ≥25中性, ≥15关注, <15预警
 const GrossMarginCell = (p: any) => {
   const v = p.value;
   if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
   const tier = tierHigherBetter(v, { exc: 60, good: 40, caution: 25, warning: 15 });
-  return (
-    <div style={cellCenter}>
-      {metricBadge(`${num(v, 1)}%`, tier, "毛利率\n阈值: ≥60%极优(软件/IP级) · ≥40%优 · ≥25%中性 · ≥15%关注 · <15%预警")}
-    </div>
-  );
+  return <div style={cellCenter}>{metricWithDot(`${num(v, 1)}%`, tier, "毛利率\n阈值: ≥60%极优(软件/IP级) · ≥40%优 · ≥25%中性 · ≥15%关注 · <15%预警")}</div>;
 };
 
-// EBITDA 率: 越高越好。阈值: ≥35极优, ≥20优, ≥10中性, ≥0关注, <0预警(亏损)
+// EBITDA 率: 越高越好。阈值: ≥35极优, ≥20优, ≥10中性, ≥0关注, <0预警
 const EbitdaMarginCell = (p: any) => {
   const v = p.value;
   if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
   const tier = tierHigherBetter(v, { exc: 35, good: 20, caution: 10, warning: 0 });
-  return (
-    <div style={cellCenter}>
-      {metricBadge(`${v >= 0 ? "" : ""}${num(v, 1)}%`, tier, "EBITDA 利润率\n阈值: ≥35%极优 · ≥20%优 · ≥10%中性 · ≥0%关注 · <0%预警(亏损)")}
-    </div>
-  );
+  return <div style={cellCenter}>{metricWithDot(`${num(v, 1)}%`, tier, "EBITDA 利润率\n阈值: ≥35%极优 · ≥20%优 · ≥10%中性 · ≥0%关注 · <0%预警(亏损)")}</div>;
 };
 
 // 通用动量分级配色（不同阈值的版本）
