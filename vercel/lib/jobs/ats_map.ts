@@ -282,6 +282,15 @@ export const ATS_MAP: Record<string, AtsEntry> = {
   },
 
   // ── Lever ──
+  // Velo3D — 金属 3D 打印（航天/国防应用）
+  VELO: {
+    provider: "lever",
+    config: {
+      company: "velo3d",
+      // 追踪国防 vs 商业客户线
+      keywords: ["Defense", "Aerospace", "Sapphire", "SpaceX", "Government"],
+    },
+  },
   // Palantir 用代号化的团队名 + 在 title 里嵌入产品/客户线
   PLTR: {
     provider: "lever",
