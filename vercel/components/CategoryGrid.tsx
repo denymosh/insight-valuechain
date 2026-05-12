@@ -325,21 +325,78 @@ const mcapTierIdx = (v: number | null | undefined): number => {
   return 0;
 };
 
-// Combined PE: ttm / fwd (similar to EMA 50/200 layout)
+// ── 阈值配色助手 ──────────────────────────────────────────────────────
+// 5 个等级：极优 / 优秀 / 普通 / 关注 / 预警
+type Tier = "excellent" | "good" | "neutral" | "caution" | "warning";
+const TIER_STYLE: Record<Tier, { fg: string; bg: string; bd: string }> = {
+  excellent: { fg: "#86efac", bg: "rgba(34,197,94,0.20)",  bd: "rgba(34,197,94,0.55)" },
+  good:      { fg: "#86efac", bg: "rgba(34,197,94,0.10)",  bd: "rgba(34,197,94,0.30)" },
+  neutral:   { fg: "#cbd5e1", bg: "transparent",           bd: "transparent" },
+  caution:   { fg: "#fdba74", bg: "rgba(251,146,60,0.14)", bd: "rgba(251,146,60,0.45)" },
+  warning:   { fg: "#fca5a5", bg: "rgba(239,68,68,0.18)",  bd: "rgba(239,68,68,0.55)" },
+};
+
+// 数值越小越好（如 PE、PS）→ 阈值: excellent < good < caution < warning
+function tierLowerBetter(v: number, t: { exc: number; good: number; caution: number; warning: number }): Tier {
+  if (v <= t.exc) return "excellent";
+  if (v <= t.good) return "good";
+  if (v <= t.caution) return "neutral";
+  if (v <= t.warning) return "caution";
+  return "warning";
+}
+// 数值越大越好（如 利润率、增长率）→ 阈值反向
+function tierHigherBetter(v: number, t: { exc: number; good: number; caution: number; warning: number }): Tier {
+  if (v >= t.exc) return "excellent";
+  if (v >= t.good) return "good";
+  if (v >= t.caution) return "neutral";
+  if (v >= t.warning) return "caution";
+  return "warning";
+}
+
+function metricBadge(text: string, tier: Tier, tip?: string, fontSize = 13, fontWeight = 600) {
+  const s = TIER_STYLE[tier];
+  const isPlain = tier === "neutral";
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        fontSize, fontWeight,
+        color: s.fg,
+        background: s.bg,
+        border: isPlain ? "none" : `1px solid ${s.bd}`,
+        padding: isPlain ? "0 4px" : "2px 7px",
+        borderRadius: 5,
+        fontVariantNumeric: "tabular-nums",
+      }}
+      title={tip}
+    >
+      {text}
+    </span>
+  );
+}
+
+// Combined PE: ttm / fwd (with threshold tints — PE 越低越好)
+// 阈值: ≤15=极优, ≤25=优, ≤50=普通, ≤80=关注, >80=预警
 const PeCombinedCell = (p: any) => {
   const q = p.data?.quote;
   const ttm = q?.pe_ttm;
   const fwd = q?.pe_fwd;
-  const fmt = (v: any) => {
-    if (v == null || v <= 0) return "—";
-    return v >= 100 ? Number(v).toFixed(0) : Number(v).toFixed(2);
+  const tipPE = "PE TTM (历史) / PE Forward (前瞻)\n阈值: ≤15极优 · ≤25优 · ≤50中性 · ≤80关注 · >80预警\n负 PE = 公司亏损中";
+  const renderPE = (v: any) => {
+    if (v == null || v <= 0) {
+      // 负 PE = 亏损
+      return <span style={{ color: "#fca5a5", fontWeight: 600 }} title="亏损中">—</span>;
+    }
+    const tier = tierLowerBetter(v, { exc: 15, good: 25, caution: 50, warning: 80 });
+    const text = v >= 100 ? Number(v).toFixed(0) : Number(v).toFixed(1);
+    return metricBadge(text, tier, undefined, 13);
   };
   return (
     <div style={cellCenter}>
-      <div style={{ fontSize: 14, fontWeight: 600 }}>
-        <span style={{ color: "#cbd5e1" }}>{fmt(ttm)}</span>
-        <span style={{ color: "#475569", margin: "0 5px" }}>/</span>
-        <span style={{ color: "#94a3b8" }}>{fmt(fwd)}</span>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }} title={tipPE}>
+        {renderPE(ttm)}
+        <span style={{ color: "#475569", fontSize: 11 }}>/</span>
+        {renderPE(fwd)}
       </div>
     </div>
   );
@@ -379,8 +436,70 @@ const PeCell = (p: any) => {
     </div>
   );
 };
-const PsCell = PlainCell((v) => num(v, 2));
+// PS (市销率) 越低越好。阈值: ≤3极优, ≤8优, ≤15中性, ≤25关注, >25预警
+const PsCell = (p: any) => {
+  const v = p.value;
+  if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  const tier = tierLowerBetter(v, { exc: 3, good: 8, caution: 15, warning: 25 });
+  return (
+    <div style={cellCenter}>
+      {metricBadge(num(v, 2), tier, "市销率 (Price/Sales)\n阈值: ≤3极优 · ≤8优 · ≤15中性 · ≤25关注 · >25预警")}
+    </div>
+  );
+};
+
 const PctNeutralCell = PlainCell((v) => (v == null ? "—" : `${num(v, 1)}%`));
+
+// 营收 YoY: 越高越好。阈值: ≥40极优, ≥20优, ≥5中性, ≥0关注, <0预警(萎缩)
+const RevYoyCell = (p: any) => {
+  const v = p.value;
+  if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  const tier = tierHigherBetter(v, { exc: 40, good: 20, caution: 5, warning: 0 });
+  return (
+    <div style={cellCenter}>
+      {metricBadge(`${v >= 0 ? "+" : ""}${num(v, 1)}%`, tier, "营收同比增长率\n阈值: ≥40%极优 · ≥20%优 · ≥5%中性 · ≥0%关注 · <0%预警(营收萎缩)")}
+    </div>
+  );
+};
+
+// 预期增长 (EPS Fwd): 越高越好。阈值: ≥50极优, ≥20优, ≥5中性, ≥0关注, <0预警
+// (注：基数效应导致 >300% 时含义打折)
+const GrowthFwdCell = (p: any) => {
+  const v = p.value;
+  if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  const tier = tierHigherBetter(v, { exc: 50, good: 20, caution: 5, warning: 0 });
+  // 显示超大值时缩写
+  const text = Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k%` : `${v >= 0 ? "+" : ""}${num(v, 0)}%`;
+  return (
+    <div style={cellCenter}>
+      {metricBadge(text, tier, "预期 EPS 增长率\n阈值: ≥50%极优 · ≥20%优 · ≥5%中性 · ≥0%关注 · <0%预警\n注：>300%通常是低基数效应，需结合营收增长解读")}
+    </div>
+  );
+};
+
+// 毛利率: 越高越好。阈值: ≥60极优(软件/IP), ≥40优, ≥25中性, ≥15关注, <15预警
+const GrossMarginCell = (p: any) => {
+  const v = p.value;
+  if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  const tier = tierHigherBetter(v, { exc: 60, good: 40, caution: 25, warning: 15 });
+  return (
+    <div style={cellCenter}>
+      {metricBadge(`${num(v, 1)}%`, tier, "毛利率\n阈值: ≥60%极优(软件/IP级) · ≥40%优 · ≥25%中性 · ≥15%关注 · <15%预警")}
+    </div>
+  );
+};
+
+// EBITDA 率: 越高越好。阈值: ≥35极优, ≥20优, ≥10中性, ≥0关注, <0预警(亏损)
+const EbitdaMarginCell = (p: any) => {
+  const v = p.value;
+  if (v == null) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+  const tier = tierHigherBetter(v, { exc: 35, good: 20, caution: 10, warning: 0 });
+  return (
+    <div style={cellCenter}>
+      {metricBadge(`${v >= 0 ? "" : ""}${num(v, 1)}%`, tier, "EBITDA 利润率\n阈值: ≥35%极优 · ≥20%优 · ≥10%中性 · ≥0%关注 · <0%预警(亏损)")}
+    </div>
+  );
+};
 
 // 通用动量分级配色（不同阈值的版本）
 function momTint(v: number, thresholds = { strong: 5, mid: 2 }) {
@@ -792,15 +911,15 @@ export default function CategoryGrid({
         sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "PE TTM/前瞻", colId: "pe", width: 115, cellRenderer: PeCombinedCell,
         valueGetter: (p) => p.data?.quote?.pe_ttm ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "市销率", colId: "ps", width: 60, cellRenderer: PsCell,
+      { headerName: "市销率", colId: "ps", width: 64, cellRenderer: PsCell,
         valueGetter: (p) => p.data?.quote?.ps_ttm ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "营收 YoY", colId: "yoy", width: 72, cellRenderer: PctNeutralCell,
+      { headerName: "营收 YoY", colId: "yoy", width: 78, cellRenderer: RevYoyCell,
         valueGetter: (p) => p.data?.quote?.growth_yoy ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "预期增长", colId: "fwd", width: 72, cellRenderer: PctNeutralCell,
+      { headerName: "预期增长", colId: "fwd", width: 78, cellRenderer: GrowthFwdCell,
         valueGetter: (p) => p.data?.quote?.growth_fwd ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "毛利率", colId: "gm", width: 64, cellRenderer: PctNeutralCell,
+      { headerName: "毛利率", colId: "gm", width: 70, cellRenderer: GrossMarginCell,
         valueGetter: (p) => p.data?.quote?.gross_margin ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "EBITDA率", colId: "em", width: 76, cellRenderer: PctNeutralCell,
+      { headerName: "EBITDA率", colId: "em", width: 80, cellRenderer: EbitdaMarginCell,
         valueGetter: (p) => p.data?.quote?.ebitda_margin ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "WS 评级", colId: "ws", width: 88, cellRenderer: WsCell,
         valueGetter: (p) => p.data?.quote?.ws_rating ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
