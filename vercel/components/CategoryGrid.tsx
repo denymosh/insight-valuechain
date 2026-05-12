@@ -552,17 +552,33 @@ const EmaCell = (p: any) => {
   );
 };
 
-// merged: top big "47.5 / 54.5" + sub-line "月 69 周 59 日 54"
+// merged: top "47.5 / 54.5" + per-timeframe RSI + trio state dots
 const RsiCombinedCell = (p: any) => {
   const q = p.data?.quote;
   const r6 = q?.rsi6, r14 = q?.rsi14;
   const bg = rsiBg(r6) || rsiBg(r14);
-  const sub = (label: string, v: number | null | undefined) => (
-    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 3 }}>
+
+  const dotColor = (state: boolean | null | undefined) =>
+    state == null ? "#475569" : state ? "#22c55e" : "#475569";
+  const dotRing = (state: boolean | null | undefined) =>
+    state ? "0 0 0 2px rgba(34,197,94,0.18)" : "none";
+
+  const col = (label: string, rsiVal: number | null | undefined, dotState: boolean | null | undefined, tip: string) => (
+    <div
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 28 }}
+      title={tip}
+    >
       <span style={{ color: "#64748b", fontSize: 10 }}>{label}</span>
-      <span style={{ color: rsiColor(v), fontWeight: 700, fontSize: 12 }}>{num(v, 0)}</span>
-    </span>
+      <span style={{ color: rsiColor(rsiVal), fontWeight: 700, fontSize: 12 }}>{num(rsiVal, 0)}</span>
+      <span style={{
+        width: 9, height: 9, borderRadius: "50%",
+        background: dotColor(dotState),
+        boxShadow: dotRing(dotState),
+        display: "inline-block",
+      }} />
+    </div>
   );
+
   return (
     <div style={cellCenter}>
       <div style={{
@@ -574,10 +590,10 @@ const RsiCombinedCell = (p: any) => {
           <span style={{ color: "#475569", margin: "0 5px" }}>/</span>
           <span style={{ color: rsiColor(r14) }}>{num(r14, 1)}</span>
         </div>
-        <div style={{ marginTop: 3, display: "flex", justifyContent: "center", gap: 9 }}>
-          {sub("月", q?.rsi_m)}
-          {sub("周", q?.rsi_w)}
-          {sub("日", q?.rsi_d)}
+        <div style={{ marginTop: 4, display: "flex", justifyContent: "center", gap: 8 }}>
+          {col("月", q?.rsi_m, q?.m_state, "月线格局: 价格>EMA10>EMA20")}
+          {col("周", q?.rsi_w, q?.w_state, "周线趋势: 价格>EMA10>EMA20 & MACD>信号")}
+          {col("日", q?.rsi_d, q?.d_state, "日线操作: 价格>EMA20 & RSI14∈[40,80]")}
         </div>
       </div>
     </div>
@@ -792,14 +808,8 @@ export default function CategoryGrid({
         valueGetter: (p) => p.data?.quote?.target_price ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "EMA 50/200", colId: "ema", width: 140, cellRenderer: EmaCell,
         valueGetter: (p) => p.data?.quote?.ema50 ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "RSI 6/14", colId: "rsi", width: 145, cellRenderer: RsiCombinedCell,
+      { headerName: "RSI 6/14 · 月周日", colId: "rsi", width: 158, cellRenderer: RsiCombinedCell,
         valueGetter: (p) => p.data?.quote?.rsi14 ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
-      { headerName: "月/周/日", colId: "trio", width: 105, cellRenderer: TrioStateCell,
-        valueGetter: (p) => {
-          const q = p.data?.quote;
-          return (q?.m_state ? 1 : 0) + (q?.w_state ? 1 : 0) + (q?.d_state ? 1 : 0);
-        },
-        sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { field: "position_status", headerName: "状态", editable: true, width: 78,
         cellRenderer: StatusCell, headerClass: "ag-center-header",
         cellEditor: "agSelectCellEditor", cellEditorParams: { values: ["watch", "target", "holding", "sold"] } },
