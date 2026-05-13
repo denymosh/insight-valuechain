@@ -387,6 +387,82 @@ export default function Page() {
                 {activeSectorObj.description && <span className="desc">{activeSectorObj.description}</span>}
               </div>
             )}
+            {activeSector != null && activeSector !== ALL_KEY && (() => {
+              // 当前赛道内、7 天内出财报的标的（去重 by symbol）
+              const seen = new Set<string>();
+              const upcoming = enrichedTickers
+                .filter((t) => {
+                  const cat = categories.find((c) => c.id === t.category_id);
+                  if (cat?.sector_id !== activeSector) return false;
+                  const er = (t as any).quote?.next_earnings;
+                  if (!er || er.days == null || er.days < 0 || er.days > 7) return false;
+                  if (seen.has(t.symbol)) return false;
+                  seen.add(t.symbol);
+                  return true;
+                })
+                .sort((a, b) => ((a as any).quote.next_earnings.days - (b as any).quote.next_earnings.days));
+              if (upcoming.length === 0) return null;
+              const timeLabel = (t: string) => t === "bmo" ? "盘前" : t === "amc" ? "盘后" : "";
+              const fmtDate = (d: string) => {
+                const parts = d.split("-");
+                return `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}`;
+              };
+              return (
+                <div style={{
+                  marginBottom: 12,
+                  padding: "10px 14px",
+                  background: "rgba(251,146,60,0.08)",
+                  border: "1px solid rgba(251,146,60,0.35)",
+                  borderRadius: 8,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 10,
+                }}>
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, color: "#fdba74",
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                  }}>
+                    📅 7 天内财报
+                    <span style={{ color: "#94a3b8", fontWeight: 500 }}>· {upcoming.length} 个</span>
+                  </span>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {upcoming.map((t) => {
+                      const er = (t as any).quote.next_earnings;
+                      const days = er.days;
+                      const dayBucket = days <= 1 ? "imminent" : days <= 3 ? "soon" : "week";
+                      const color = dayBucket === "imminent"
+                        ? { fg: "#fca5a5", bg: "rgba(239,68,68,0.15)", bd: "rgba(239,68,68,0.50)" }
+                        : dayBucket === "soon"
+                        ? { fg: "#fdba74", bg: "rgba(251,146,60,0.14)", bd: "rgba(251,146,60,0.45)" }
+                        : { fg: "#93c5fd", bg: "rgba(96,165,250,0.12)", bd: "rgba(96,165,250,0.40)" };
+                      const dayText = days === 0 ? "今天" : days === 1 ? "明天" : `${days}天后`;
+                      return (
+                        <span
+                          key={t.symbol}
+                          title={`${t.symbol} · ${er.date}${er.time !== "unknown" ? " (" + timeLabel(er.time) + ")" : ""}`}
+                          style={{
+                            display: "inline-flex", alignItems: "baseline", gap: 5,
+                            fontSize: 12, fontWeight: 600,
+                            color: color.fg, background: color.bg,
+                            border: `1px solid ${color.bd}`,
+                            padding: "3px 9px", borderRadius: 5,
+                            letterSpacing: "0.01em",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{t.symbol}</span>
+                          <span style={{ opacity: 0.75 }}>{fmtDate(er.date)}</span>
+                          {er.time !== "unknown" && (
+                            <span style={{ fontSize: 10, opacity: 0.7 }}>{timeLabel(er.time)}</span>
+                          )}
+                          <span style={{ fontSize: 10, opacity: 0.85, marginLeft: 2 }}>{dayText}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
             {activeSector === ALL_KEY && (
               <div className="sector-head"><h2>未分类</h2><span className="desc">尚未归入任何赛道的标的</span></div>
             )}
