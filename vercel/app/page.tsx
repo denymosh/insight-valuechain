@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CategoryPanel from "@/components/CategoryPanel";
 import RecentJobsCard from "@/components/RecentJobsCard";
-import WatchHeatmap from "@/components/WatchHeatmap";
 import { jget, jpost, jpatch, jdel } from "@/lib/api";
 import type { Quote } from "@/lib/quote";
 import {
@@ -505,27 +504,6 @@ export default function Page() {
                 👋 开始：点右上角 "+ 一级赛道" → 创建赛道 → 在赛道下创建二级分类 → 在分类面板中添加标的
               </div>
             )}
-
-            {/* 当前赛道观察标的热力图 */}
-            {activeSector != null && activeSector !== ALL_KEY && (() => {
-              const seen = new Set<string>();
-              const sectorTickers = enrichedTickers
-                .filter((t) => {
-                  const cat = categories.find((c) => c.id === t.category_id);
-                  if (cat?.sector_id !== activeSector) return false;
-                  if (seen.has(t.symbol)) return false;
-                  seen.add(t.symbol);
-                  return true;
-                })
-                .map((t) => ({
-                  symbol: t.symbol,
-                  display_name: (t as any).display_name,
-                  market_cap: (t as any).quote?.market_cap ?? null,
-                  change_pct: (t as any).quote?.change_pct ?? null,
-                }));
-              const title = activeSectorObj ? `📊 ${activeSectorObj.name} · 观察热力图` : "📊 观察热力图";
-              return <WatchHeatmap tickers={sectorTickers} title={title} />;
-            })()}
 
             {/* 主表格下方的招聘动态卡片 */}
             <RecentJobsCard activeSector={activeSector === ALL_KEY ? null : activeSector} />
