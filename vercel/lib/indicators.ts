@@ -15,6 +15,18 @@ export function ema(values: number[], length: number): number[] {
   return out;
 }
 
+/** Simple Moving Average. For first (length-1) values, returns partial average so far. */
+export function sma(values: number[], length: number): number[] {
+  const out: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= length) sum -= values[i - length];
+    out.push(i >= length - 1 ? sum / length : sum / (i + 1));
+  }
+  return out;
+}
+
 export function rsi(values: number[], length: number): number[] {
   if (values.length < 2) return values.map(() => 50);
   const alpha = 1 / length;
@@ -92,6 +104,13 @@ export type Snapshot = Partial<{
   return_6m: number;
   /** 12M-1 动量（%）：从 13 个月前到 1 个月前的累积收益（学术标准 Jegadeesh-Titman） */
   mom_12m1: number;
+  // ── 趋势信号系统（9-EMA / 21-EMA / 50-SMA / 200-SMA 多时间维度对齐）──
+  ema9_d: number;
+  ema21_d: number;
+  sma50_d: number;
+  sma200_d: number;
+  /** "bull" = 9>21 EMA & 价>50/200 SMA, "hold" = 价仅守住 200 SMA, "bear" = 全部跌破 */
+  trend_signal: "bull" | "hold" | "bear" | "mixed";
 }>;
 
 export function computeSnapshot(daily: Bar[], weekly: Bar[], monthly: Bar[]): Snapshot {
@@ -113,6 +132,40 @@ export function computeSnapshot(daily: Bar[], weekly: Bar[], monthly: Bar[]): Sn
     out.high_52w = hi;
     out.ema50 = ema(c, 50)[c.length - 1];
     out.ema200 = c.length >= 200 ? ema(c, 200)[c.length - 1] : null;
+
+    // ── 趋势信号系统 ──
+    // 短期动量用 EMA（响应快），中长期支撑用 SMA（华尔街共识）
+    if (c.length >= 21) {
+      const e9  = ema(c, 9)[c.length - 1];
+      const e21 = ema(c, 21)[c.length - 1];
+      out.ema9_d  = e9;
+      out.ema21_d = e21;
+      const sma50  = c.length >= 50  ? sma(c, 50)[c.length - 1]  : null;
+      const sma200 = c.length >= 200 ? sma(c, 200)[c.length - 1] : null;
+      if (sma50  != null) out.sma50_d  = sma50;
+      if (sma200 != null) out.sma200_d = sma200;
+
+      // 四个条件
+      const cond9over21 = e9 > e21;
+      const condAbove50 = sma50  != null ? last > sma50  : null;
+      const condAbove200 = sma200 != null ? last > sma200 : null;
+
+      // 判定逻辑
+      if (cond9over21 && condAbove50 === true && condAbove200 === true) {
+        out.trend_signal = "bull";
+      } else if (condAbove200 === true && (cond9over21 === false || condAbove50 === false)) {
+        // 长期趋势仍在（>200SMA）但短/中期已弱
+        out.trend_signal = "hold";
+      } else if (!cond9over21 && condAbove50 === false && condAbove200 === false) {
+        out.trend_signal = "bear";
+      } else if (condAbove200 === false) {
+        // 跌破 200SMA 但短/中期还在 → 关注（可能熊市反弹）
+        out.trend_signal = "mixed";
+      } else {
+        out.trend_signal = "mixed";
+      }
+    }
+
     out.rsi6 = rsi(c, 6)[c.length - 1];
     out.rsi14 = rsi(c, 14)[c.length - 1];
     out.rsi_d = out.rsi14;

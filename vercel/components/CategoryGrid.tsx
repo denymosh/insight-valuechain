@@ -644,6 +644,73 @@ const WsCell = (p: any) => {
   );
 };
 
+// ── 趋势信号 cell ────────────────────────────────────────────────────
+// "bull"  = 9EMA>21EMA + 价>50SMA + 价>200SMA  (最强信号)
+// "hold"  = 仅守住 200SMA（长期趋势在但动量弱）
+// "mixed" = 中间状态 (200SMA 失守或部分条件不满足)
+// "bear"  = 全部跌破
+const TrendSignalCell = (p: any) => {
+  const q = p.data?.quote;
+  const sig = q?.trend_signal;
+  if (!sig) return <div style={cellCenter}><span style={{ color: "#475569" }}>—</span></div>;
+
+  const last  = q?.last ?? q?.prev_close;
+  const e9    = q?.ema9_d;
+  const e21   = q?.ema21_d;
+  const s50   = q?.sma50_d;
+  const s200  = q?.sma200_d;
+  const cond9 = e9 != null && e21 != null ? e9 > e21 : null;
+  const c50   = last != null && s50  != null ? last > s50  : null;
+  const c200  = last != null && s200 != null ? last > s200 : null;
+
+  const styles: Record<string, { label: string; emoji: string; fg: string; bg: string; bd: string }> = {
+    bull:  { label: "Bull",  emoji: "🟢", fg: "#86efac", bg: "rgba(34,197,94,0.18)",   bd: "rgba(34,197,94,0.55)" },
+    hold:  { label: "Hold",  emoji: "🟡", fg: "#fde68a", bg: "rgba(250,204,21,0.14)",  bd: "rgba(250,204,21,0.45)" },
+    mixed: { label: "Mixed", emoji: "⚪", fg: "#94a3b8", bg: "rgba(148,163,184,0.10)", bd: "rgba(148,163,184,0.40)" },
+    bear:  { label: "Bear",  emoji: "🔴", fg: "#fca5a5", bg: "rgba(239,68,68,0.18)",   bd: "rgba(239,68,68,0.55)" },
+  };
+  const s = styles[sig] || styles.mixed;
+
+  const dot = (ok: boolean | null, label: string) => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }} title={label}>
+      <span style={{ color: "#64748b", fontSize: 9 }}>{label}</span>
+      <span style={{
+        width: 7, height: 7, borderRadius: "50%",
+        background: ok == null ? "#475569" : ok ? "#22c55e" : "#ef4444",
+      }} />
+    </div>
+  );
+
+  const tip = `趋势信号: ${s.label}
+9-EMA > 21-EMA: ${cond9 === null ? "—" : cond9 ? "✓" : "✗"}
+价 > 50-SMA:    ${c50 === null ? "—" : c50 ? "✓" : "✗"}
+价 > 200-SMA:   ${c200 === null ? "—" : c200 ? "✓" : "✗"}
+
+Bull = 三个都 ✓ (最强趋势)
+Hold = 仅 200-SMA ✓ (长期在但动量弱)
+Mixed = 部分满足
+Bear = 三个都 ✗ (全面下跌)`;
+
+  return (
+    <div style={cellCenter}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }} title={tip}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, color: s.fg,
+          background: s.bg, border: `1px solid ${s.bd}`,
+          padding: "2px 8px", borderRadius: 5,
+        }}>
+          {s.emoji} {s.label}
+        </span>
+        <div style={{ display: "flex", gap: 6 }}>
+          {dot(cond9, "9>21")}
+          {dot(c50,  ">50")}
+          {dot(c200, ">200")}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // EMA single-line: 50  73.50  /  200  60.78
 const EmaCell = (p: any) => {
   const q = p.data?.quote;
@@ -917,6 +984,12 @@ export default function CategoryGrid({
         valueGetter: (p) => p.data?.quote?.ws_rating ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "目标价", colId: "tp", width: 90, cellRenderer: TargetCell,
         valueGetter: (p) => p.data?.quote?.target_price ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
+      { headerName: "趋势信号", colId: "trend", width: 100, cellRenderer: TrendSignalCell,
+        valueGetter: (p) => {
+          const sig = p.data?.quote?.trend_signal;
+          return sig === "bull" ? 3 : sig === "hold" ? 2 : sig === "mixed" ? 1 : sig === "bear" ? 0 : null;
+        },
+        sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "EMA 50/200", colId: "ema", width: 140, cellRenderer: EmaCell,
         valueGetter: (p) => p.data?.quote?.ema50 ?? null, sortable: true, comparator: numCmp, headerClass: "ag-center-header" },
       { headerName: "RSI 6/14 · 月周日", colId: "rsi", width: 158, cellRenderer: RsiCombinedCell,
