@@ -10,11 +10,11 @@ html, body {
 
 /* ---------- top header ---------- */
 .header {
-  padding: 18px 48px 0;
+  padding: 18px 24px 0;
   border-bottom: 1px solid #1b2230;
   background: linear-gradient(180deg, #0d1320 0%, #0a0e16 100%);
 }
-.header-row { display: flex; align-items: center; gap: 16px; max-width: 2350px; margin: 0 auto; }
+.header-row { display: flex; align-items: center; gap: 16px; max-width: 2800px; margin: 0 auto; }
 .header h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.02em; color: #f1f5f9; }
 .header .meta { color: #64748b; font-size: 12px; margin-left: 24px; }
 .header-tools { display: flex; gap: 8px; margin-left: 12px; }
@@ -23,7 +23,7 @@ html, body {
 /* ---------- tabs ---------- */
 .tabs-row {
   display: flex; align-items: center; gap: 16px; padding: 14px 0 0;
-  max-width: 2350px; margin: 0 auto;
+  max-width: 2800px; margin: 0 auto;
 }
 .tabs {
   display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto;
@@ -43,10 +43,10 @@ html, body {
 
 /* ---------- content ---------- */
 .content {
-  flex: 1; overflow-y: auto; padding: 28px 32px 240px;
+  flex: 1; overflow-y: auto; padding: 28px 20px 240px;
   scroll-padding-bottom: 80px;
 }
-.content-inner { max-width: 2350px; margin: 0 auto; }
+.content-inner { max-width: 2800px; margin: 0 auto; }
 
 .sector-head {
   display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px;
