@@ -672,10 +672,11 @@ const TrendSignalCell = (p: any) => {
   const s = styles[sig] || styles.mixed;
 
   const dot = (ok: boolean | null, label: string) => (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }} title={label}>
-      <span style={{ color: "#64748b", fontSize: 9 }}>{label}</span>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 24 }} title={label}>
+      <span style={{ color: "#64748b", fontSize: 9, lineHeight: 1 }}>{label}</span>
       <span style={{
-        width: 7, height: 7, borderRadius: "50%",
+        display: "inline-block",
+        width: 8, height: 8, borderRadius: "50%",
         background: ok == null ? "#475569" : ok ? "#22c55e" : "#ef4444",
       }} />
     </div>
