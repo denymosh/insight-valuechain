@@ -115,6 +115,11 @@ export const ATS_MAP: Record<string, AtsEntry> = {
       keywords: ["Neutron", "Electron", "Archimedes", "Rutherford", "Photon"],
     },
   },
+  // SpaceX（2026-06 上市，NASDAQ: SPCX）— metadata "Program" 字段自动计入关键项目
+  SPCX: {
+    provider: "greenhouse",
+    config: { boardToken: "spacex" },
+  },
   ALAB: {
     provider: "greenhouse",
     config: { boardToken: "asteralabs" },

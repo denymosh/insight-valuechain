@@ -48,11 +48,20 @@ export async function fetchGreenhouseSummary(
     for (const m of meta) {
       const name = String(m?.name ?? "");
       const val = m?.value;
-      if (/job\s*discipline|department|job\s*family|category/i.test(name)) {
+      // RKLB 用 "Job Discipline"，SpaceX 用 "Discipline"
+      if (/discipline|department|job\s*family|category/i.test(name)) {
         const arr = Array.isArray(val) ? val : (val != null ? [val] : []);
         for (const v of arr) {
           const s = String(v ?? "").trim();
           if (s) deptFromMeta.push(s);
+        }
+      }
+      // SpaceX 的 "Program" 字段（Starlink / Starship / Falcon ...）计入关键项目
+      if (/^program$/i.test(name.trim())) {
+        const arr = Array.isArray(val) ? val : (val != null ? [val] : []);
+        for (const v of arr) {
+          const s = String(v ?? "").trim();
+          if (s) by_keyword[s] = (by_keyword[s] ?? 0) + 1;
         }
       }
       if (/employment\s*type/i.test(name) && val != null) {
