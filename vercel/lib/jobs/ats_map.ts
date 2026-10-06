@@ -193,11 +193,13 @@ export const ATS_MAP: Record<string, AtsEntry> = {
   },
 
   // ── 大科技 / 数据中心 ──
+  // Dell 2026 年中从 Workday 迁到 Oracle HCM（jobs.dell.com 301 到这里）
   DELL: {
-    provider: "workday",
+    provider: "oracle_hcm",
     config: {
-      tenant: "dell", pod: "wd1", site: "External",
-      publicBase: "https://dell.wd1.myworkdayjobs.com/External",
+      host: "iawmqy.fa.ocs.oraclecloud.com",
+      siteNumber: "careers",
+      publicDomain: "iawmqy.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience",
     },
   },
 
