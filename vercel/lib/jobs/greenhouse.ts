@@ -5,6 +5,12 @@
 
 import type { JobSummary } from "./oracle_hcm";
 
+const US_STATES = new Set([
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC","D.C.",
+]);
+
 export type GreenhouseConfig = {
   /** board token, e.g. "rocketlab" */
   boardToken: string;
@@ -82,11 +88,12 @@ export async function fetchGreenhouseSummary(
     const locName: string = String(j.location?.name ?? "").trim();
     if (locName) {
       const parts = locName.split(",").map((s) => s.trim()).filter(Boolean);
-      const tail = parts[parts.length - 1] || locName;
-      // 美国州名归到 USA
-      const country = /^(CA|MD|VA|TX|FL|NY|CO|WA|OR|MA|NJ|GA|AZ|NC|PA|IL|OH|MI|MN|IN)$/i.test(tail)
+      // "Remote - TX" → "TX"
+      const tail = (parts[parts.length - 1] || locName).replace(/^remote\s*-\s*/i, "");
+      // 美国州名（50 州 + DC）归到 USA
+      const country = US_STATES.has(tail.toUpperCase()) || /^(US|USA|United States)$/i.test(tail)
         ? "USA"
-        : (/^US$/i.test(tail) ? "USA" : tail);
+        : tail;
       by_country[country] = (by_country[country] ?? 0) + 1;
     }
 
@@ -103,7 +110,8 @@ export async function fetchGreenhouseSummary(
     }
 
     // ── Posted recency ──
-    const upd = j.updated_at ?? j.first_published ?? null;
+    // 优先 first_published：SpaceX 等会批量刷新 updated_at，导致全部岗位看起来都是新发布
+    const upd = j.first_published ?? j.updated_at ?? null;
     if (upd) {
       const t = new Date(upd).getTime();
       if (Number.isFinite(t)) {
