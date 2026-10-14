@@ -8,12 +8,18 @@
     {
       "path": "/api/cron/refresh-jobs",
       "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/cron/analyze-jobs",
+      "schedule": "20 22 * * *"
     }
   ],
   "functions": {
     "app/api/cron/refresh-prices/route.ts": { "maxDuration": 60 },
     "app/api/cron/refresh-daily/route.ts":  { "maxDuration": 60 },
     "app/api/cron/refresh-jobs/route.ts":   { "maxDuration": 60 },
+    "app/api/cron/analyze-jobs/route.ts":   { "maxDuration": 60 },
+    "app/api/jobs/analyze/route.ts":        { "maxDuration": 60 },
     "app/api/refresh_indicators/[symbol]/route.ts": { "maxDuration": 30 }
   }
 }

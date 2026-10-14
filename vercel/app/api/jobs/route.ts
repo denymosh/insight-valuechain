@@ -12,5 +12,9 @@ export async function GET() {
     .order("total", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ summaries: data ?? [] });
+  // weekly AI insights (table may not exist yet -> ignore errors)
+  const { data: ins } = await sb.from("job_insights").select("symbol, insight, model, generated_at");
+  const insights: Record<string, unknown> = {};
+  for (const r of ins ?? []) if ((r as any).insight) insights[(r as any).symbol] = r;
+  return NextResponse.json({ summaries: data ?? [], insights });
 }

@@ -171,7 +171,68 @@ function analyze(s: JobSummary): { positive: string[]; caution: string[] } {
   return { positive, caution };
 }
 
-function SummaryCard({ s }: { s: JobSummary }) {
+type Insight = { insight: string; model?: string; generated_at: string };
+
+// 周更 AI 解读 + 点击即时重新分析（流式）
+function AiInsight({ symbol, saved }: { symbol: string; saved?: Insight }) {
+  const [live, setLive] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setLive(null); setBusy(false); }, [symbol]);
+
+  async function run() {
+    setBusy(true); setLive("");
+    try {
+      const res = await fetch("/api/jobs/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol }),
+      });
+      if (!res.ok || !res.body) { setLive(`分析失败：${await res.text()}`); return; }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += dec.decode(value, { stream: true });
+        setLive(acc);
+      }
+    } catch (e: any) {
+      setLive(`分析失败：${e?.message || e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const text = live ?? saved?.insight ?? null;
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(51,65,85,0.4)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#a5b4fc" }}>🤖 AI 招聘解读</span>
+        <span style={{ fontSize: 10, color: "#64748b" }}>
+          {live !== null ? "刚刚生成" : saved ? `每周自动更新 · ${timeAgo(saved.generated_at)}` : "尚未生成"}
+        </span>
+        <button
+          onClick={run}
+          disabled={busy}
+          style={{
+            marginLeft: "auto", fontSize: 11, padding: "3px 10px", borderRadius: 5, cursor: busy ? "default" : "pointer",
+            color: "#c7d2fe", background: "rgba(99,102,241,0.18)", border: "1px solid rgba(129,140,248,0.4)",
+          }}
+        >{busy ? "分析中…" : text ? "重新分析" : "AI 分析"}</button>
+      </div>
+      {text ? (
+        <div style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+          {text.replace(/\*\*/g, "")}
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: "#64748b" }}>点击“AI 分析”，结合近期历史快照解读该公司的招聘变化。</div>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({ s, insight }: { s: JobSummary; insight?: Insight }) {
   const { positive, caution } = analyze(s);
   const topDepts = topN(s.by_dept, 3);
   const topCountries = topN(s.by_country, 3);
@@ -229,6 +290,7 @@ function SummaryCard({ s }: { s: JobSummary }) {
       </div>
 
       <DeptBreakdown s={s} />
+      <AiInsight symbol={s.symbol} saved={insight} />
     </div>
   );
 }
@@ -503,6 +565,7 @@ function CategoryMiniCard({
 
 export default function RecentJobsCard({ activeSector }: { activeSector?: number | null }) {
   const [summaries, setSummaries] = useState<JobSummary[]>([]);
+  const [insights, setInsights] = useState<Record<string, Insight>>({});
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tickers, setTickers] = useState<Ticker[]>([]);
@@ -521,6 +584,7 @@ export default function RecentJobsCard({ activeSector }: { activeSector?: number
           (s: JobSummary) => (s.total ?? 0) > 0
         );
         setSummaries(active);
+        setInsights(jobsData.insights ?? {});
         setSectors(snapData.sectors ?? []);
         setCategories(snapData.categories ?? []);
         setTickers(snapData.tickers ?? []);
@@ -675,7 +739,7 @@ export default function RecentJobsCard({ activeSector }: { activeSector?: number
             </div>
           )}
 
-          {current && <SummaryCard s={current} />}
+          {current && <SummaryCard s={current} insight={insights[current.symbol]} />}
         </>
       )}
     </div>

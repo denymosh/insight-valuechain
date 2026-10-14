@@ -67,6 +67,22 @@ export async function GET(req: Request) {
       { onConflict: "symbol" }
     );
     if (error) throw new Error(error.message);
+    // daily history snapshot (one row per symbol per UTC day) for trend analysis
+    const { error: snapErr } = await sb.from("job_snapshots").upsert(
+      {
+        symbol: s.symbol,
+        snap_date: new Date().toISOString().slice(0, 10),
+        total: s.total,
+        posted_7d: s.posted_7d,
+        posted_30d: s.posted_30d,
+        by_dept: s.by_dept,
+        by_country: s.by_country,
+        by_title: s.by_title,
+        by_keyword: s.by_keyword ?? null,
+      },
+      { onConflict: "symbol,snap_date" }
+    );
+    if (snapErr) console.warn("job_snapshots upsert failed", s.symbol, snapErr.message);
     return { symbol: sym, total: s.total, ok: true };
   }));
 

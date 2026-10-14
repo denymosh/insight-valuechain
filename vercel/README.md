@@ -102,3 +102,11 @@ Hobby 100 GB 带宽 + 100k function 调用 / 月。轮询 30s × 单用户 ≈ 8
 
 **Q：怎么从本地版迁移数据？**
 本地的 `data.db`（SQLite）里有 sectors / categories / tickers 表，可以导出成 CSV 然后从 Supabase 后台导入。或者写个一次性迁移脚本（要的话告诉我）。
+
+## AI 招聘分析
+
+- `refresh-jobs` 每天额外写一行 `job_snapshots`（历史快照）。
+- `/api/cron/analyze-jobs`（每天 22:20 UTC）对超过 6 天未更新的标的调用 Claude 生成解读，存入 `job_insights`；`?force=1` 可全量重跑。
+- 详情卡片里的“AI 分析”按钮调用 `POST /api/jobs/analyze`，流式输出即时解读（同一标的 20 秒内限一次）。
+- 环境变量：`ANTHROPIC_API_KEY`（必填）、`JOBS_AI_MODEL`（可选，默认 `claude-sonnet-5-5`，想省钱可设 `claude-haiku-5-5`）。
+- 首次使用需在 Supabase SQL 编辑器执行 `supabase/schema.sql` 末尾新增的三张表（`job_summaries` 若已存在会自动跳过）。

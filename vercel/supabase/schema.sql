@@ -90,3 +90,42 @@ create table if not exists quotes (
   next_earnings    jsonb,    -- {date, time, days}
   updated_at       timestamptz not null default now()
 );
+
+
+-- ---------- Hiring data ----------
+-- Latest aggregated hiring summary per symbol (written by /api/cron/refresh-jobs).
+create table if not exists job_summaries (
+  symbol      text primary key,
+  total       int not null default 0,
+  posted_7d   int not null default 0,
+  posted_30d  int not null default 0,
+  by_dept     jsonb not null default '{}'::jsonb,
+  by_country  jsonb not null default '{}'::jsonb,
+  by_title    jsonb not null default '{}'::jsonb,
+  by_keyword  jsonb,
+  careers_url text,
+  fetched_at  timestamptz not null default now()
+);
+
+-- Daily history of the summary above, one row per symbol per day (trend analysis input).
+create table if not exists job_snapshots (
+  symbol      text not null,
+  snap_date   date not null,
+  total       int not null default 0,
+  posted_7d   int not null default 0,
+  posted_30d  int not null default 0,
+  by_dept     jsonb not null default '{}'::jsonb,
+  by_country  jsonb not null default '{}'::jsonb,
+  by_title    jsonb not null default '{}'::jsonb,
+  by_keyword  jsonb,
+  primary key (symbol, snap_date)
+);
+
+-- AI-written hiring insight per symbol (weekly via /api/cron/analyze-jobs).
+create table if not exists job_insights (
+  symbol       text primary key,
+  insight      text,
+  model        text,
+  generated_at timestamptz,
+  manual_at    timestamptz
+);
